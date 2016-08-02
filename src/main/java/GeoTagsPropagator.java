@@ -4,15 +4,14 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.attribute.BasicFileAttributeView;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.List;
 import java.util.TimeZone;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -22,20 +21,27 @@ import com.drew.imaging.ImageMetadataReader;
 import com.drew.imaging.ImageProcessingException;
 import com.drew.lang.GeoLocation;
 import com.drew.metadata.Metadata;
+import com.drew.metadata.exif.ExifDirectoryBase;
 import com.drew.metadata.exif.GpsDirectory;
 
 public class GeoTagsPropagator {
 
 	private static Logger LOG = Logger.getLogger("GeoTagsPropagator");
 	private static final LinkOption noFollowLinks = LinkOption.NOFOLLOW_LINKS;
-	private static final ZoneId defaultZone = TimeZone.getDefault().toZoneId();
+	private static final TimeZone defaultTimeZone = TimeZone.getDefault();
+	private static final ZoneId defaultZoneID = defaultTimeZone.toZoneId();
 
 	private static String pathString;
 	private static Path startDirPath;
 
-	private static Map<Path, BasicFileAttributeView> pathBasicFileAttributeViewMap = new LinkedHashMap<>();
-	private static Map<Path, BasicFileAttributes> pathBasicFileAttributesMap = new LinkedHashMap<>();
-	private static Map<Path, GeoTaggedPhotoWrapper> geotaggedPathsMap = new LinkedHashMap<>();
+	// private static Map<Path, BasicFileAttributeView>
+	// pathBasicFileAttributeViewMap = new LinkedHashMap<>();
+	// private static Map<Path, BasicFileAttributes> pathBasicFileAttributesMap
+	// = new LinkedHashMap<>();
+
+	private static List<GeoTaggedPhotoWrapper> geotaggedPathsList = new ArrayList<>();
+	// we process local date time, not path
+	private static List<UntaggedPhotoWrapper> untaggedPathsList = new ArrayList<>();
 
 	private static double rounding = 10000d;
 	// private static DecimalFormat roundingDF;
@@ -59,6 +65,8 @@ public class GeoTagsPropagator {
 		} catch (IOException e) {
 			LOG.log(Level.SEVERE, "Error occurred when traversing directory " + pathString, e);
 		}
+
+		LOG.log(Level.INFO, "Processing finished for path " + pathString);
 
 	}
 
@@ -94,13 +102,48 @@ public class GeoTagsPropagator {
 
 		try (Stream<Path> nestedFilesStreamPath = Files.walk(startDirPath);) {
 			nestedFilesStreamPath.forEach(t -> {
-				fillPathMaps(t);
+				fillPathLists(t);
 			});
 		}
 		;
+
+		if (geotaggedPathsList.isEmpty()) {
+			LOG.log(Level.INFO, "No geotagged photos found at " + pathString);
+			return;
+		}
+
+		if (untaggedPathsList.isEmpty()) {
+			LOG.log(Level.INFO, "No untagged photos found at " + pathString);
+			return;
+		}
+
+		tagUntaggedFiles();
+
 	}
 
-	private static void fillPathMaps(Path path) {
+	private static void tagUntaggedFiles() {
+
+		untaggedPathsList.stream().forEach(t -> {
+			UntaggedPhotoWrapper untaggedWrapper = t;
+			LocalDateTime untaggedLDT = untaggedWrapper.getFileDateTime();
+
+			// let's stream through tagged photos
+			geotaggedPathsList.stream().forEach(g -> {
+				GeoTaggedPhotoWrapper geoTagged = g;
+				LocalDateTime taggedLDT = geoTagged.getFileDateTime();
+
+				long minutesDiff = Math.abs(taggedLDT.until(untaggedLDT, ChronoUnit.MINUTES));
+				// difference must be not less than 1 hour, this is the time to
+				// change location
+				if (minutesDiff <= 60) {
+
+				}
+			});
+		});
+
+	}
+
+	private static void fillPathLists(Path path) {
 		// omitting directories
 		boolean isDirectory = Files.isDirectory(path, noFollowLinks);
 		if (isDirectory) {
@@ -119,12 +162,32 @@ public class GeoTagsPropagator {
 
 		Collection<GpsDirectory> gpsDirectories = metadata.getDirectoriesOfType(GpsDirectory.class);
 		if (gpsDirectories.isEmpty()) {
-			// TODO usual photo
+			processUntaggedFile(path, metadata);
 			// it is a usual file without geotags
 
 		} else {
 			processGeoTaggedFile(path, gpsDirectories);
 		}
+
+	}
+
+	private static void processUntaggedFile(Path path, Metadata metadata) {
+
+		Collection<ExifDirectoryBase> exifDirectories = metadata.getDirectoriesOfType(ExifDirectoryBase.class);
+		if (exifDirectories.isEmpty()) {
+			LOG.log(Level.WARNING, "No ExifDirectoryBase for " + path.toString());
+			return;
+		}
+
+		ExifDirectoryBase exifDir = exifDirectories.iterator().next();
+		Date exifDate = exifDir.getDate(ExifDirectoryBase.TAG_DATETIME, defaultTimeZone);
+		// LOG.log(Level.INFO, path.toString() + " - " + exifDate);
+		LocalDateTime exifLDT = convertDateToLocalDateTime(exifDate);
+
+		// untaggedPathsMap.put(exifLDT, path);
+		UntaggedPhotoWrapper untaggedWrapper = new UntaggedPhotoWrapper(path, exifLDT, exifDir);
+
+		untaggedPathsList.add(untaggedWrapper);
 	}
 
 	private static void processGeoTaggedFile(Path path, Collection<GpsDirectory> gpsDirectories) {
@@ -140,9 +203,7 @@ public class GeoTagsPropagator {
 		}
 
 		Date gpsDate = gpsDir.getGpsDate();
-		Instant instantGps = gpsDate.toInstant();
-		LocalDateTime gpsLDT = LocalDateTime.ofInstant(instantGps, defaultZone);
-
+		LocalDateTime gpsLDT = convertDateToLocalDateTime(gpsDate);
 		// here we should process geolocation and round it somehow up to 10-20
 		// meters.
 
@@ -163,7 +224,15 @@ public class GeoTagsPropagator {
 		GeoLocation roundedGeoLocation = new GeoLocation(roundedLatitude, roundedLongitude);
 
 		GeoTaggedPhotoWrapper geoWrapper = new GeoTaggedPhotoWrapper(path, gpsLDT, roundedGeoLocation);
-		geotaggedPathsMap.put(path, geoWrapper);
+		geotaggedPathsList.add(geoWrapper);
+	}
+
+	private static LocalDateTime convertDateToLocalDateTime(Date date) {
+
+		Instant instantGps = date.toInstant();
+		LocalDateTime gpsLDT = LocalDateTime.ofInstant(instantGps, defaultZoneID);
+
+		return gpsLDT;
 	}
 
 	private static double roundTo4DecimalPlaces(double value) {
