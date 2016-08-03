@@ -10,8 +10,13 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.TimeZone;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -44,6 +49,8 @@ public class GeoTagsPropagator {
 	private static List<UntaggedPhotoWrapper> untaggedPathsList = new ArrayList<>();
 
 	private static double rounding = 10000d;
+	private static int assignedCounter;
+
 	// private static DecimalFormat roundingDF;
 	// static {
 	// roundingDF = new DecimalFormat("#.####");
@@ -127,19 +134,50 @@ public class GeoTagsPropagator {
 			UntaggedPhotoWrapper untaggedWrapper = t;
 			LocalDateTime untaggedLDT = untaggedWrapper.getFileDateTime();
 
+			// List<Map.Entry<GeoLocation, Long>> minutesDiffList = new
+			// ArrayList<>();
+
+			Map<GpsDirectory, Long> minutesDiffMap = new HashMap<>();
+
 			// let's stream through tagged photos
 			geotaggedPathsList.stream().forEach(g -> {
 				GeoTaggedPhotoWrapper geoTagged = g;
 				LocalDateTime taggedLDT = geoTagged.getFileDateTime();
+				GeoLocation geoLocation = geoTagged.getGeoLocation();
+				GpsDirectory gpsDirectory = geoTagged.getGpsDirectory();
 
 				long minutesDiff = Math.abs(taggedLDT.until(untaggedLDT, ChronoUnit.MINUTES));
 				// difference must be not less than 1 hour, this is the time to
 				// change location
 				if (minutesDiff <= 60) {
-
+					// Here we fill some array that can be sorted.
+					// Entry<GeoLocation, Long> newEntry = new
+					// HashMap.Entry<GeoLocation, Long>(geoLocation,
+					// minutesDiff);
+					minutesDiffMap.put(gpsDirectory, minutesDiff);
 				}
 			});
+
+			// converting map to list for sorting
+			List<Map.Entry<GpsDirectory, Long>> minutesDiffList = new ArrayList<>(minutesDiffMap.entrySet());
+			Collections.sort(minutesDiffList, (e1, e2) -> Long.compare(e1.getValue(), e2.getValue()));
+
+			Optional<Entry<GpsDirectory, Long>> optionalEntry = minutesDiffList.stream().findFirst();
+			if (optionalEntry.isPresent()) {
+				// here we should assign geolocation.
+				GpsDirectory gpsDirectory = optionalEntry.get().getKey();
+				assignGeoLocation(gpsDirectory, untaggedWrapper);
+			}
 		});
+
+	}
+
+	private static void assignGeoLocation(GpsDirectory gpsDirectory, UntaggedPhotoWrapper untaggedWrapper) {
+		// LOG.log(Level.INFO, "Location " + geoLocation + " for path " +
+		// untaggedWrapper.getPath().toString());
+
+		// trying to directly add metadata
+		untaggedWrapper.getMetadata().addDirectory(gpsDirectory);
 
 	}
 
@@ -185,7 +223,7 @@ public class GeoTagsPropagator {
 		LocalDateTime exifLDT = convertDateToLocalDateTime(exifDate);
 
 		// untaggedPathsMap.put(exifLDT, path);
-		UntaggedPhotoWrapper untaggedWrapper = new UntaggedPhotoWrapper(path, exifLDT, exifDir);
+		UntaggedPhotoWrapper untaggedWrapper = new UntaggedPhotoWrapper(path, exifLDT, metadata);
 
 		untaggedPathsList.add(untaggedWrapper);
 	}
@@ -195,7 +233,6 @@ public class GeoTagsPropagator {
 		GeoLocation extractedGeoLocation = gpsDir.getGeoLocation();
 
 		if (extractedGeoLocation != null && !extractedGeoLocation.isZero()) {
-			// System.out.println(geoLocation.toString());
 
 		} else {
 
@@ -223,7 +260,7 @@ public class GeoTagsPropagator {
 		// counstructing rounded geolocation for path.
 		GeoLocation roundedGeoLocation = new GeoLocation(roundedLatitude, roundedLongitude);
 
-		GeoTaggedPhotoWrapper geoWrapper = new GeoTaggedPhotoWrapper(path, gpsLDT, roundedGeoLocation);
+		GeoTaggedPhotoWrapper geoWrapper = new GeoTaggedPhotoWrapper(path, gpsLDT, roundedGeoLocation, gpsDir);
 		geotaggedPathsList.add(geoWrapper);
 	}
 

@@ -2,7 +2,7 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Objects;
 
-import com.drew.metadata.exif.ExifDirectoryBase;
+import com.drew.metadata.Metadata;
 
 /**
  *
@@ -17,11 +17,6 @@ public class UntaggedPhotoWrapper {
 
 	@Override
 	public int hashCode() {
-		// final int prime = 31;
-		// int result = 1;
-		// result = prime * result + ((path == null) ? 0 : path.hashCode());
-		// return result;
-
 		return Objects.hash(this.path);
 	}
 
@@ -47,18 +42,26 @@ public class UntaggedPhotoWrapper {
 		return true;
 	}
 
-	public UntaggedPhotoWrapper(Path path, LocalDateTime fileDateTime, ExifDirectoryBase exifDirectory) {
+	public UntaggedPhotoWrapper(Path path, LocalDateTime fileDateTime, Metadata metadata) {
 		super();
 		this.path = path;
 		this.fileDateTime = fileDateTime;
-		this.exifDirectory = exifDirectory;
+		this.metadata = metadata;
+	}
+
+	public Metadata getMetadata() {
+		return metadata;
+	}
+
+	public void setMetadata(Metadata metadata) {
+		this.metadata = metadata;
 	}
 
 	private Path path;
 
 	private LocalDateTime fileDateTime;
 
-	private ExifDirectoryBase exifDirectory;
+	private Metadata metadata;
 
 	public Path getPath() {
 		return path;
@@ -76,11 +79,4 @@ public class UntaggedPhotoWrapper {
 		this.fileDateTime = fileDateTime;
 	}
 
-	public ExifDirectoryBase getExifDirectory() {
-		return exifDirectory;
-	}
-
-	public void setExifDirectory(ExifDirectoryBase exifDirectory) {
-		this.exifDirectory = exifDirectory;
-	}
 }

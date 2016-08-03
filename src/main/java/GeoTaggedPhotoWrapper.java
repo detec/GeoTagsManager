@@ -3,6 +3,7 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 
 import com.drew.lang.GeoLocation;
+import com.drew.metadata.exif.GpsDirectory;
 
 /**
  *
@@ -16,16 +17,7 @@ public class GeoTaggedPhotoWrapper {
 
 	@Override
 	public int hashCode() {
-		// final int prime = 31;
-		// int result = 1;
-		// result = prime * result + ((fileDateTime == null) ? 0 :
-		// fileDateTime.hashCode());
-		// result = prime * result + ((geoLocation == null) ? 0 :
-		// geoLocation.hashCode());
-		// result = prime * result + ((path == null) ? 0 : path.hashCode());
-		// return result;
-
-		return Objects.hash(this.path, this.fileDateTime, this.geoLocation);
+		return Objects.hash(this.path, this.fileDateTime, this.geoLocation, this.gpsDirectory);
 	}
 
 	@Override
@@ -54,6 +46,13 @@ public class GeoTaggedPhotoWrapper {
 		} else if (!geoLocation.equals(other.geoLocation)) {
 			return false;
 		}
+		if (gpsDirectory == null) {
+			if (other.gpsDirectory != null) {
+				return false;
+			}
+		} else if (!gpsDirectory.equals(other.gpsDirectory)) {
+			return false;
+		}
 		if (path == null) {
 			if (other.path != null) {
 				return false;
@@ -72,11 +71,14 @@ public class GeoTaggedPhotoWrapper {
 		return path;
 	}
 
-	public GeoTaggedPhotoWrapper(Path path, LocalDateTime fileDateTime, GeoLocation geoLocation) {
+	public GeoTaggedPhotoWrapper(Path path, LocalDateTime fileDateTime, GeoLocation geoLocation,
+			GpsDirectory gpsDirectory) {
+
 		super();
 		this.path = path;
 		this.fileDateTime = fileDateTime;
 		this.geoLocation = geoLocation;
+		this.gpsDirectory = gpsDirectory;
 	}
 
 	public void setPath(Path path) {
@@ -100,5 +102,15 @@ public class GeoTaggedPhotoWrapper {
 	}
 
 	private GeoLocation geoLocation;
+
+	private GpsDirectory gpsDirectory;
+
+	public GpsDirectory getGpsDirectory() {
+		return gpsDirectory;
+	}
+
+	public void setGpsDirectory(GpsDirectory gpsDirectory) {
+		this.gpsDirectory = gpsDirectory;
+	}
 
 }

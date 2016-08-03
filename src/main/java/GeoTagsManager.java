@@ -11,8 +11,8 @@ import java.util.logging.Logger;
 
 import com.drew.imaging.ImageMetadataReader;
 import com.drew.imaging.ImageProcessingException;
-import com.drew.lang.GeoLocation;
 import com.drew.metadata.Metadata;
+import com.drew.metadata.Tag;
 import com.drew.metadata.exif.GpsDirectory;
 
 public class GeoTagsManager {
@@ -89,20 +89,28 @@ public class GeoTagsManager {
 		// tagDescription));
 		// });
 
-		GeoLocation geoLocation = gpsDir.getGeoLocation();
-		if (geoLocation != null && !geoLocation.isZero()) {
-			System.out.println(geoLocation.toString());
+		// GeoLocation geoLocation = gpsDir.getGeoLocation();
+		// if (geoLocation != null && !geoLocation.isZero()) {
+		// System.out.println(geoLocation.toString());
+		//
+		// }
+		//
+		// else {
+		// logNoGpsError();
+		// }
+		//
+		// System.out.println("GPS date: " + gpsDir.getGpsDate());
 
-		}
+		Collection<Tag> tagsCollection = gpsDir.getTags();
 
-		else {
-			logNoGpsError();
-		}
+		String formatString = "dir name: %s , tag name: %s , tag type %s , value: %s ";
+		tagsCollection.stream().forEach(t -> {
+			String formattedExpression = String.format(formatString, t.getDirectoryName(), t.getTagName(),
+					t.getTagType(), t.getDescription());
 
-		// get original date when the photo has been shot
-		// ExifDirectoryBase.TAG_DATETIME_ORIGINAL
+			System.out.println(formattedExpression);
 
-		System.out.println("GPS date: " + gpsDir.getGpsDate());
+		});
 	}
 
 	private static void logNoGpsError() {
