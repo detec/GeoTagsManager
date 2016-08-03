@@ -27,6 +27,7 @@ import com.drew.imaging.ImageProcessingException;
 import com.drew.lang.GeoLocation;
 import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifDirectoryBase;
+import com.drew.metadata.exif.ExifSubIFDDirectory;
 import com.drew.metadata.exif.GpsDirectory;
 
 public class GeoTagsPropagator {
@@ -211,14 +212,29 @@ public class GeoTagsPropagator {
 
 	private static void processUntaggedFile(Path path, Metadata metadata) {
 
-		Collection<ExifDirectoryBase> exifDirectories = metadata.getDirectoriesOfType(ExifDirectoryBase.class);
+		// Collection<ExifDirectoryBase> exifDirectories =
+		// metadata.getDirectoriesOfType(ExifDirectoryBase.class);
+		// if (exifDirectories.isEmpty()) {
+		// LOG.log(Level.WARNING, "No ExifDirectoryBase for " +
+		// path.toString());
+		// return;
+		// }
+		//
+		// ExifDirectoryBase exifDir = exifDirectories.iterator().next();
+		// Date exifDate = exifDir.getDate(ExifDirectoryBase.TAG_DATETIME,
+		// defaultTimeZone);
+
+		// from https://github.com/drewnoakes/metadata-extractor/wiki/FAQ
+		Collection<ExifSubIFDDirectory> exifDirectories = metadata.getDirectoriesOfType(ExifSubIFDDirectory.class);
 		if (exifDirectories.isEmpty()) {
-			LOG.log(Level.WARNING, "No ExifDirectoryBase for " + path.toString());
+			LOG.log(Level.WARNING, "No ExifSubIFDDirectory for " + path.toString());
 			return;
 		}
 
-		ExifDirectoryBase exifDir = exifDirectories.iterator().next();
-		Date exifDate = exifDir.getDate(ExifDirectoryBase.TAG_DATETIME, defaultTimeZone);
+		ExifSubIFDDirectory exifDir = exifDirectories.iterator().next();
+
+		Date exifDate = exifDir.getDate(ExifDirectoryBase.TAG_DATETIME_ORIGINAL);
+
 		// LOG.log(Level.INFO, path.toString() + " - " + exifDate);
 		LocalDateTime exifLDT = convertDateToLocalDateTime(exifDate);
 
