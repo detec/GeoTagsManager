@@ -1,9 +1,13 @@
+import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -21,6 +25,16 @@ import java.util.TimeZone;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
+
+import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.Imaging;
+import org.apache.commons.imaging.common.IImageMetadata;
+import org.apache.commons.imaging.formats.jpeg.JpegImageMetadata;
+import org.apache.commons.imaging.formats.jpeg.exif.ExifRewriter;
+import org.apache.commons.imaging.formats.tiff.TiffImageMetadata;
+import org.apache.commons.imaging.formats.tiff.write.TiffOutputSet;
+import org.apache.commons.imaging.util.IoUtils;
 
 import com.drew.imaging.ImageMetadataReader;
 import com.drew.imaging.ImageProcessingException;
@@ -74,6 +88,7 @@ public class GeoTagsPropagator {
 			LOG.log(Level.SEVERE, "Error occurred when traversing directory " + pathString, e);
 		}
 
+		LOG.log(Level.INFO, "Processed image files: " + assignedCounter);
 		LOG.log(Level.INFO, "Processing finished for path " + pathString);
 
 	}
@@ -125,11 +140,15 @@ public class GeoTagsPropagator {
 			return;
 		}
 
+		LOG.log(Level.INFO,
+				"Geotagged files found: " + geotaggedPathsList.size() + ", files to tag: " + untaggedPathsList.size());
 		tagUntaggedFiles();
 
 	}
 
 	private static void tagUntaggedFiles() {
+
+		// String timeFormat = "Untagged file %s with local date time %s";
 
 		untaggedPathsList.stream().forEach(t -> {
 			UntaggedPhotoWrapper untaggedWrapper = t;
@@ -138,7 +157,10 @@ public class GeoTagsPropagator {
 			// List<Map.Entry<GeoLocation, Long>> minutesDiffList = new
 			// ArrayList<>();
 
-			Map<GpsDirectory, Long> minutesDiffMap = new HashMap<>();
+			// LOG.log(Level.INFO, String.format(timeFormat,
+			// untaggedWrapper.getPath().toString(), untaggedLDT));
+
+			Map<GeoLocation, Long> minutesDiffMap = new HashMap<>();
 
 			// let's stream through tagged photos
 			geotaggedPathsList.stream().forEach(g -> {
@@ -155,30 +177,105 @@ public class GeoTagsPropagator {
 					// Entry<GeoLocation, Long> newEntry = new
 					// HashMap.Entry<GeoLocation, Long>(geoLocation,
 					// minutesDiff);
-					minutesDiffMap.put(gpsDirectory, minutesDiff);
+					minutesDiffMap.put(geoLocation, minutesDiff);
 				}
 			});
 
 			// converting map to list for sorting
-			List<Map.Entry<GpsDirectory, Long>> minutesDiffList = new ArrayList<>(minutesDiffMap.entrySet());
+			List<Map.Entry<GeoLocation, Long>> minutesDiffList = new ArrayList<>(minutesDiffMap.entrySet());
 			Collections.sort(minutesDiffList, (e1, e2) -> Long.compare(e1.getValue(), e2.getValue()));
 
-			Optional<Entry<GpsDirectory, Long>> optionalEntry = minutesDiffList.stream().findFirst();
+			Optional<Entry<GeoLocation, Long>> optionalEntry = minutesDiffList.stream().findFirst();
 			if (optionalEntry.isPresent()) {
 				// here we should assign geolocation.
-				GpsDirectory gpsDirectory = optionalEntry.get().getKey();
-				assignGeoLocation(gpsDirectory, untaggedWrapper);
+				// GpsDirectory gpsDirectory = optionalEntry.get().getKey();
+				GeoLocation geoLocation = optionalEntry.get().getKey();
+				assignGeoLocation(geoLocation, untaggedWrapper);
 			}
 		});
 
 	}
 
-	private static void assignGeoLocation(GpsDirectory gpsDirectory, UntaggedPhotoWrapper untaggedWrapper) {
+	private static void assignGeoLocation(GeoLocation geoLocation, UntaggedPhotoWrapper untaggedWrapper) {
 		// LOG.log(Level.INFO, "Location " + geoLocation + " for path " +
 		// untaggedWrapper.getPath().toString());
 
 		// trying to directly add metadata
-		untaggedWrapper.getMetadata().addDirectory(gpsDirectory);
+		// untaggedWrapper.getMetadata().addDirectory(gpsDirectory);
+
+		IImageMetadata metadata = null;
+		TiffOutputSet outputSet = null;
+
+		OutputStream os = null;
+		boolean canThrow = false;
+
+		Path path = untaggedWrapper.getPath();
+		File imageFile = path.toFile();
+
+		try {
+			metadata = Imaging.getMetadata(imageFile);
+
+			JpegImageMetadata jpegMetadata = (JpegImageMetadata) metadata;
+			if (jpegMetadata != null) {
+				// note that exif might be null if no Exif metadata is found.
+				final TiffImageMetadata exif = jpegMetadata.getExif();
+
+				if (null != exif) {
+					// TiffImageMetadata class is immutable (read-only).
+					// TiffOutputSet class represents the Exif data to write.
+					//
+					// Usually, we want to update existing Exif metadata by
+					// changing
+					// the values of a few fields, or adding a field.
+					// In these cases, it is easiest to use getOutputSet() to
+					// start with a "copy" of the fields read from the image.
+					try {
+						outputSet = exif.getOutputSet();
+					} catch (ImageWriteException e) {
+						LOG.log(Level.WARNING, "Could not get EXIF output set from " + path.toString(), e);
+						return;
+					}
+				}
+
+				else {
+					// if file does not contain any exif metadata, we create an
+					// empty
+					// set of exif metadata. Otherwise, we keep all of the other
+					// existing tags.
+					if (outputSet == null) {
+						outputSet = new TiffOutputSet();
+					}
+				}
+
+				outputSet.setGPSInDegrees(geoLocation.getLongitude(), geoLocation.getLatitude());
+
+				String formatTmp = "%stmp";
+				File outFile = new File(String.format(formatTmp, path.toString()));
+
+				os = new FileOutputStream(outFile);
+				os = new BufferedOutputStream(os);
+
+				new ExifRewriter().updateExifMetadataLossless(imageFile, os, outputSet);
+
+				// renaming from temp file
+				Files.move(outFile.toPath(), path, StandardCopyOption.REPLACE_EXISTING);
+				assignedCounter++;
+			}
+
+		} catch (ImageReadException | IOException | ImageWriteException e) {
+			LOG.log(Level.WARNING, "Could not get/set image metadata from " + path.toString(), e);
+			return;
+		}
+
+		finally
+
+		{
+			try {
+				IoUtils.closeQuietly(canThrow, os);
+			} catch (IOException e) {
+				LOG.log(Level.WARNING, "Could not close image file " + path.toString(), e);
+			}
+		}
 
 	}
 
@@ -236,7 +333,7 @@ public class GeoTagsPropagator {
 		Date exifDate = exifDir.getDate(ExifDirectoryBase.TAG_DATETIME_ORIGINAL);
 
 		// LOG.log(Level.INFO, path.toString() + " - " + exifDate);
-		LocalDateTime exifLDT = convertDateToLocalDateTime(exifDate);
+		LocalDateTime exifLDT = convertDateToLocalDateTimeUTC0(exifDate);
 
 		// untaggedPathsMap.put(exifLDT, path);
 		UntaggedPhotoWrapper untaggedWrapper = new UntaggedPhotoWrapper(path, exifLDT, metadata);
@@ -284,6 +381,13 @@ public class GeoTagsPropagator {
 
 		Instant instantGps = date.toInstant();
 		LocalDateTime gpsLDT = LocalDateTime.ofInstant(instantGps, defaultZoneID);
+
+		return gpsLDT;
+	}
+
+	private static LocalDateTime convertDateToLocalDateTimeUTC0(Date date) {
+		Instant instantGps = date.toInstant();
+		LocalDateTime gpsLDT = LocalDateTime.ofInstant(instantGps, ZoneId.of("UTC"));
 
 		return gpsLDT;
 	}
