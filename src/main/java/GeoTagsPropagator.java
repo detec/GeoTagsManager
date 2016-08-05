@@ -1,22 +1,29 @@
+import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributeView;
+import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -36,6 +43,8 @@ import org.apache.commons.imaging.formats.tiff.TiffImageMetadata;
 import org.apache.commons.imaging.formats.tiff.write.TiffOutputSet;
 import org.apache.commons.imaging.util.IoUtils;
 
+import com.drew.imaging.FileType;
+import com.drew.imaging.FileTypeDetector;
 import com.drew.imaging.ImageMetadataReader;
 import com.drew.imaging.ImageProcessingException;
 import com.drew.lang.GeoLocation;
@@ -54,8 +63,7 @@ public class GeoTagsPropagator {
 	private static String pathString;
 	private static Path startDirPath;
 
-	// private static Map<Path, BasicFileAttributeView>
-	// pathBasicFileAttributeViewMap = new LinkedHashMap<>();
+	private static Map<Path, BasicFileAttributeView> pathBasicFileAttributeViewMap = new LinkedHashMap<>();
 	// private static Map<Path, BasicFileAttributes> pathBasicFileAttributesMap
 	// = new LinkedHashMap<>();
 
@@ -64,13 +72,8 @@ public class GeoTagsPropagator {
 	private static List<UntaggedPhotoWrapper> untaggedPathsList = new ArrayList<>();
 
 	private static double rounding = 10000d;
-	private static int assignedCounter;
-
-	// private static DecimalFormat roundingDF;
-	// static {
-	// roundingDF = new DecimalFormat("#.####");
-	// roundingDF.setRoundingMode(RoundingMode.CEILING);
-	// }
+	private static int assignedGPSCounter;
+	private static int reassignedFileDates;
 
 	public static void main(String[] args) {
 		if (args.length != 1) {
@@ -81,15 +84,16 @@ public class GeoTagsPropagator {
 		pathString = args[0];
 		validatePath();
 
-		LOG.log(Level.INFO, "Argument checks passed, starting to process files in " + pathString + " ...");
+		LOG.log(Level.INFO, "Argument checks passed, starting to process files in " + pathString);
 		try {
 			processFiles();
 		} catch (IOException e) {
 			LOG.log(Level.SEVERE, "Error occurred when traversing directory " + pathString, e);
 		}
 
-		LOG.log(Level.INFO, "Processed image files: " + assignedCounter);
-		LOG.log(Level.INFO, "Processing finished for path " + pathString);
+		LOG.log(Level.INFO, "Processed untagged image files with geotags: " + assignedGPSCounter);
+		LOG.log(Level.INFO, "Reassigned dates for files: " + reassignedFileDates);
+		LOG.log(Level.INFO, "Finished processing for path " + pathString);
 
 	}
 
@@ -130,19 +134,31 @@ public class GeoTagsPropagator {
 		}
 		;
 
+		boolean needReturn = false;
+
 		if (geotaggedPathsList.isEmpty()) {
-			LOG.log(Level.INFO, "No geotagged photos found at " + pathString);
-			return;
+			// LOG.log(Level.INFO, "No geotagged photos found at " +
+			// pathString);
+			needReturn = true;
+
 		}
 
 		if (untaggedPathsList.isEmpty()) {
 			LOG.log(Level.INFO, "No untagged photos found at " + pathString);
-			return;
+			needReturn = true;
 		}
 
 		LOG.log(Level.INFO,
 				"Geotagged files found: " + geotaggedPathsList.size() + ", files to tag: " + untaggedPathsList.size());
+
+		if (needReturn) {
+			// before quitting - we process dates.
+			processUntaggedFilesDates();
+			return;
+		}
+
 		tagUntaggedFiles();
+		processUntaggedFilesDates();
 
 	}
 
@@ -153,7 +169,7 @@ public class GeoTagsPropagator {
 		untaggedPathsList.stream().forEach(t -> {
 			UntaggedPhotoWrapper untaggedWrapper = t;
 			LocalDateTime untaggedLDT = untaggedWrapper.getFileDateTime();
-
+			Path unTaggedPath = untaggedWrapper.getPath();
 			// List<Map.Entry<GeoLocation, Long>> minutesDiffList = new
 			// ArrayList<>();
 
@@ -192,8 +208,25 @@ public class GeoTagsPropagator {
 				GeoLocation geoLocation = optionalEntry.get().getKey();
 				assignGeoLocation(geoLocation, untaggedWrapper);
 			}
+
 		});
 
+	}
+
+	private static void processUntaggedFilesDates() {
+		untaggedPathsList.stream().forEach(t -> {
+			UntaggedPhotoWrapper untaggedWrapper = t;
+			LocalDateTime untaggedLDT = untaggedWrapper.getFileDateTime();
+			Path unTaggedPath = untaggedWrapper.getPath();
+
+			// here we assign file attributes.
+			FileTime universalFT = getFileTimeFromLDT(untaggedLDT);
+			BasicFileAttributeView bfaView = pathBasicFileAttributeViewMap.get(unTaggedPath);
+			if (bfaView != null) {
+				assignCommonFileTime(bfaView, universalFT, unTaggedPath);
+			}
+
+		});
 	}
 
 	private static void assignGeoLocation(GeoLocation geoLocation, UntaggedPhotoWrapper untaggedWrapper) {
@@ -259,7 +292,7 @@ public class GeoTagsPropagator {
 
 				// renaming from temp file
 				Files.move(outFile.toPath(), path, StandardCopyOption.REPLACE_EXISTING);
-				assignedCounter++;
+				assignedGPSCounter++;
 			}
 
 		} catch (ImageReadException | IOException | ImageWriteException e) {
@@ -287,6 +320,17 @@ public class GeoTagsPropagator {
 		}
 
 		File file = path.toFile();
+		try (InputStream inputStream = new FileInputStream(file);) {
+			BufferedInputStream bufferedInputStream = new BufferedInputStream(inputStream);
+			FileType fileType = FileTypeDetector.detectFileType(bufferedInputStream);
+
+			if (fileType != FileType.Jpeg) {
+				// we do not process files other than Jpeg.
+				return;
+			}
+		} catch (IOException e) {
+			LOG.log(Level.WARNING, "Could not read file " + path.toString(), e);
+		}
 
 		Metadata metadata = null;
 		try {
@@ -309,18 +353,6 @@ public class GeoTagsPropagator {
 
 	private static void processUntaggedFile(Path path, Metadata metadata) {
 
-		// Collection<ExifDirectoryBase> exifDirectories =
-		// metadata.getDirectoriesOfType(ExifDirectoryBase.class);
-		// if (exifDirectories.isEmpty()) {
-		// LOG.log(Level.WARNING, "No ExifDirectoryBase for " +
-		// path.toString());
-		// return;
-		// }
-		//
-		// ExifDirectoryBase exifDir = exifDirectories.iterator().next();
-		// Date exifDate = exifDir.getDate(ExifDirectoryBase.TAG_DATETIME,
-		// defaultTimeZone);
-
 		// from https://github.com/drewnoakes/metadata-extractor/wiki/FAQ
 		Collection<ExifSubIFDDirectory> exifDirectories = metadata.getDirectoriesOfType(ExifSubIFDDirectory.class);
 		if (exifDirectories.isEmpty()) {
@@ -339,6 +371,8 @@ public class GeoTagsPropagator {
 		UntaggedPhotoWrapper untaggedWrapper = new UntaggedPhotoWrapper(path, exifLDT, metadata);
 
 		untaggedPathsList.add(untaggedWrapper);
+
+		pathBasicFileAttributeViewMap.put(path, Files.getFileAttributeView(path, BasicFileAttributeView.class));
 	}
 
 	private static void processGeoTaggedFile(Path path, Collection<GpsDirectory> gpsDirectories) {
@@ -375,6 +409,28 @@ public class GeoTagsPropagator {
 
 		GeoTaggedPhotoWrapper geoWrapper = new GeoTaggedPhotoWrapper(path, gpsLDT, roundedGeoLocation, gpsDir);
 		geotaggedPathsList.add(geoWrapper);
+
+		BasicFileAttributeView pathBFAView = Files.getFileAttributeView(path, BasicFileAttributeView.class);
+		FileTime universalFT = getFileTimeFromLDT(gpsLDT);
+
+		assignCommonFileTime(pathBFAView, universalFT, path);
+
+	}
+
+	private static void assignCommonFileTime(BasicFileAttributeView pathBFAView, FileTime universalFT, Path path) {
+		try {
+			pathBFAView.setTimes(universalFT, universalFT, universalFT);
+			reassignedFileDates++;
+		} catch (IOException e) {
+			LOG.log(Level.WARNING, "Could not set attributes for file: " + path.toString(), e);
+		}
+	}
+
+	private static FileTime getFileTimeFromLDT(LocalDateTime localDateTime) {
+		ZonedDateTime newGeneratedZDT = ZonedDateTime.of(localDateTime, defaultZoneID);
+		FileTime newGeneratedFT = FileTime.from(newGeneratedZDT.toInstant());
+
+		return newGeneratedFT;
 	}
 
 	private static LocalDateTime convertDateToLocalDateTime(Date date) {
