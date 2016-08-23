@@ -5,8 +5,10 @@
   <version>0.0.1-SNAPSHOT</version>
   <name>Geo tags manager</name>
   <description>Read and write GPS coordinates</description>
-  
-<!--   <repository>
+ 
+<!-- 
+<repositories>  
+<repository>
   <id>apache.snapshots</id>
   <name>Apache Development Snapshot Repository</name>
   <url>https://repository.apache.org/content/repositories/snapshots/</url>
@@ -16,7 +18,10 @@
   <snapshots>
     <enabled>true</enabled>
   </snapshots>
-</repository>  -->
+</repository>  
+</repositories>
+
+-->
 
   <build>
     <sourceDirectory>src</sourceDirectory>
