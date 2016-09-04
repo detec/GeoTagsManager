@@ -36,7 +36,7 @@ import java.util.stream.Stream;
 import org.apache.commons.imaging.ImageReadException;
 import org.apache.commons.imaging.ImageWriteException;
 import org.apache.commons.imaging.Imaging;
-import org.apache.commons.imaging.common.IImageMetadata;
+import org.apache.commons.imaging.common.ImageMetadata;
 import org.apache.commons.imaging.formats.jpeg.JpegImageMetadata;
 import org.apache.commons.imaging.formats.jpeg.exif.ExifRewriter;
 import org.apache.commons.imaging.formats.tiff.TiffImageMetadata;
@@ -236,7 +236,7 @@ public class GeoTagsPropagator {
 		// trying to directly add metadata
 		// untaggedWrapper.getMetadata().addDirectory(gpsDirectory);
 
-		IImageMetadata metadata = null;
+		// IImageMetadata metadata = null;
 		TiffOutputSet outputSet = null;
 
 		OutputStream os = null;
@@ -246,7 +246,7 @@ public class GeoTagsPropagator {
 		File imageFile = path.toFile();
 
 		try {
-			metadata = Imaging.getMetadata(imageFile);
+			ImageMetadata metadata = Imaging.getMetadata(imageFile);
 
 			JpegImageMetadata jpegMetadata = (JpegImageMetadata) metadata;
 			if (jpegMetadata != null) {
