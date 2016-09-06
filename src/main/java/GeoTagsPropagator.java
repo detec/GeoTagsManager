@@ -343,18 +343,21 @@ public class GeoTagsPropagator {
 			// it is a usual file without geotags
 
 		} else {
-			processGeoTaggedFile(path, gpsDirectories);
+			processGeoTaggedFile(path, gpsDirectories, metadata);
 		}
 
 	}
 
-	private static void processUntaggedFile(Path path, Metadata metadata) {
-
+	private static LocalDateTime getExifLDTFromMetadataExtractorMetadata(Metadata metadata) {
 		// from https://github.com/drewnoakes/metadata-extractor/wiki/FAQ
+		LocalDateTime exifLDT = null;
+
 		Collection<ExifSubIFDDirectory> exifDirectories = metadata.getDirectoriesOfType(ExifSubIFDDirectory.class);
 		if (exifDirectories.isEmpty()) {
-			LOG.log(Level.WARNING, "No ExifSubIFDDirectory for " + path.toString());
-			return;
+			// LOG.log(Level.WARNING, "No ExifSubIFDDirectory for " +
+			// path.toString());
+			// return;
+			return exifLDT;
 		}
 
 		ExifSubIFDDirectory exifDir = exifDirectories.iterator().next();
@@ -362,9 +365,20 @@ public class GeoTagsPropagator {
 		Date exifDate = exifDir.getDate(ExifDirectoryBase.TAG_DATETIME_ORIGINAL);
 
 		// LOG.log(Level.INFO, path.toString() + " - " + exifDate);
-		LocalDateTime exifLDT = convertDateToLocalDateTimeUTC0(exifDate);
+		exifLDT = convertDateToLocalDateTimeUTC0(exifDate);
 
-		// untaggedPathsMap.put(exifLDT, path);
+		return exifLDT;
+
+	}
+
+	private static void processUntaggedFile(Path path, Metadata metadata) {
+
+		LocalDateTime exifLDT = getExifLDTFromMetadataExtractorMetadata(metadata);
+		if (exifLDT == null) {
+			LOG.log(Level.WARNING, "No ExifSubIFDDirectory for " + path.toString());
+			return;
+		}
+
 		UntaggedPhotoWrapper untaggedWrapper = new UntaggedPhotoWrapper(path, exifLDT, metadata);
 
 		untaggedPathsList.add(untaggedWrapper);
@@ -372,7 +386,14 @@ public class GeoTagsPropagator {
 		pathBasicFileAttributeViewMap.put(path, Files.getFileAttributeView(path, BasicFileAttributeView.class));
 	}
 
-	private static void processGeoTaggedFile(Path path, Collection<GpsDirectory> gpsDirectories) {
+	private static void processGeoTaggedFile(Path path, Collection<GpsDirectory> gpsDirectories, Metadata metadata) {
+
+		LocalDateTime exifLDT = getExifLDTFromMetadataExtractorMetadata(metadata);
+		if (exifLDT == null) {
+			LOG.log(Level.WARNING, "No ExifSubIFDDirectory for " + path.toString());
+
+		}
+
 		GpsDirectory gpsDir = gpsDirectories.iterator().next();
 		GeoLocation extractedGeoLocation = gpsDir.getGeoLocation();
 
@@ -385,6 +406,25 @@ public class GeoTagsPropagator {
 
 		Date gpsDate = gpsDir.getGpsDate();
 		LocalDateTime gpsLDT = convertDateToLocalDateTime(gpsDate);
+
+		// Some devices convert Gps information from satellites directly as
+		// local date time, thus
+		// date/time of shooting is several hours ahead/before local date time.
+		long minutesDiff = gpsLDT.until(exifLDT, ChronoUnit.MINUTES);
+		// float hours = minutesDiff / 60;
+
+		LocalDateTime correctedLDT = null;
+		if (minutesDiff == 0) {
+			correctedLDT = gpsLDT;
+
+		}
+		// if we have hours without remainder
+		else if (minutesDiff % 60 == 0) {
+			correctedLDT = exifLDT;
+		} else {
+			correctedLDT = gpsLDT;
+		}
+
 		// here we should process geolocation and round it somehow up to 10-20
 		// meters.
 
@@ -404,7 +444,7 @@ public class GeoTagsPropagator {
 		// counstructing rounded geolocation for path.
 		GeoLocation roundedGeoLocation = new GeoLocation(roundedLatitude, roundedLongitude);
 
-		GeoTaggedPhotoWrapper geoWrapper = new GeoTaggedPhotoWrapper(path, gpsLDT, roundedGeoLocation, gpsDir);
+		GeoTaggedPhotoWrapper geoWrapper = new GeoTaggedPhotoWrapper(path, correctedLDT, roundedGeoLocation, gpsDir);
 		geotaggedPathsList.add(geoWrapper);
 
 		BasicFileAttributeView pathBFAView = Files.getFileAttributeView(path, BasicFileAttributeView.class);
