@@ -36,7 +36,6 @@ import java.util.stream.Stream;
 import org.apache.commons.imaging.ImageReadException;
 import org.apache.commons.imaging.ImageWriteException;
 import org.apache.commons.imaging.Imaging;
-import org.apache.commons.imaging.common.ImageMetadata;
 import org.apache.commons.imaging.formats.jpeg.JpegImageMetadata;
 import org.apache.commons.imaging.formats.jpeg.exif.ExifRewriter;
 import org.apache.commons.imaging.formats.tiff.TiffImageMetadata;
@@ -230,13 +229,7 @@ public class GeoTagsPropagator {
 	}
 
 	private static void assignGeoLocation(GeoLocation geoLocation, UntaggedPhotoWrapper untaggedWrapper) {
-		// LOG.log(Level.INFO, "Location " + geoLocation + " for path " +
-		// untaggedWrapper.getPath().toString());
 
-		// trying to directly add metadata
-		// untaggedWrapper.getMetadata().addDirectory(gpsDirectory);
-
-		// IImageMetadata metadata = null;
 		TiffOutputSet outputSet = null;
 
 		OutputStream os = null;
@@ -246,9 +239,13 @@ public class GeoTagsPropagator {
 		File imageFile = path.toFile();
 
 		try {
-			ImageMetadata metadata = Imaging.getMetadata(imageFile);
+			// ImageMetadata metadata = (ImageMetadata)
+			// Imaging.getMetadata(imageFile);
+			//
+			// JpegImageMetadata jpegMetadata = (JpegImageMetadata) metadata;
 
-			JpegImageMetadata jpegMetadata = (JpegImageMetadata) metadata;
+			JpegImageMetadata jpegMetadata = (JpegImageMetadata) Imaging.getMetadata(imageFile);
+
 			if (jpegMetadata != null) {
 				// note that exif might be null if no Exif metadata is found.
 				final TiffImageMetadata exif = jpegMetadata.getExif();

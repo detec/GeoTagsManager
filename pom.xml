@@ -6,8 +6,8 @@
   <name>Geo tags manager</name>
   <description>Read and write GPS coordinates</description>
  
-<!-- 
-<repositories>  
+
+<!-- <repositories>  
 <repository>
   <id>apache.snapshots</id>
   <name>Apache Development Snapshot Repository</name>
@@ -19,9 +19,9 @@
     <enabled>true</enabled>
   </snapshots>
 </repository>  
-</repositories>
+</repositories> -->
 
- -->
+
 
   <build>
     <sourceDirectory>src</sourceDirectory>
