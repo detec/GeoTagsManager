@@ -428,6 +428,9 @@ public class GeoTagsPropagator {
 			} else {
 				correctedLDT = gpsLDT;
 			}
+		} else {
+			// gps date is null
+			correctedLDT = exifLDT;
 		}
 
 		// here we should process geolocation and round it somehow up to 10-20
