@@ -404,25 +404,30 @@ public class GeoTagsPropagator {
 			return;
 		}
 
-		Date gpsDate = gpsDir.getGpsDate();
-		LocalDateTime gpsLDT = convertDateToLocalDateTime(gpsDate);
-
-		// Some devices convert Gps information from satellites directly as
-		// local date time, thus
-		// date/time of shooting is several hours ahead/before local date time.
-		long minutesDiff = gpsLDT.until(exifLDT, ChronoUnit.MINUTES);
-		// float hours = minutesDiff / 60;
-
 		LocalDateTime correctedLDT = null;
-		if (minutesDiff == 0) {
-			correctedLDT = gpsLDT;
 
-		}
-		// if we have hours without remainder
-		else if (minutesDiff % 60 == 0) {
-			correctedLDT = exifLDT;
-		} else {
-			correctedLDT = gpsLDT;
+		Date gpsDate = gpsDir.getGpsDate();
+
+		if (gpsDate != null) {
+			LocalDateTime gpsLDT = convertDateToLocalDateTime(gpsDate);
+
+			// Some devices convert Gps information from satellites directly as
+			// local date time, thus
+			// date/time of shooting is several hours ahead/before local date
+			// time.
+			long minutesDiff = gpsLDT.until(exifLDT, ChronoUnit.MINUTES);
+			// float hours = minutesDiff / 60;
+
+			if (minutesDiff == 0) {
+				correctedLDT = gpsLDT;
+
+			}
+			// if we have hours without remainder
+			else if (minutesDiff % 60 == 0) {
+				correctedLDT = exifLDT;
+			} else {
+				correctedLDT = gpsLDT;
+			}
 		}
 
 		// here we should process geolocation and round it somehow up to 10-20
@@ -448,7 +453,7 @@ public class GeoTagsPropagator {
 		geotaggedPathsList.add(geoWrapper);
 
 		BasicFileAttributeView pathBFAView = Files.getFileAttributeView(path, BasicFileAttributeView.class);
-		FileTime universalFT = getFileTimeFromLDT(gpsLDT);
+		FileTime universalFT = getFileTimeFromLDT(correctedLDT);
 
 		assignCommonFileTime(pathBFAView, universalFT, path);
 
