@@ -15,6 +15,19 @@ import com.drew.metadata.Metadata;
  */
 public class UntaggedPhotoWrapper {
 
+	private Path path;
+
+	private LocalDateTime fileDateTime;
+
+	private Metadata metadata;
+
+	public UntaggedPhotoWrapper(Path path, LocalDateTime fileDateTime, Metadata metadata) {
+		super();
+		this.path = path;
+		this.fileDateTime = fileDateTime;
+		this.metadata = metadata;
+	}
+
 	@Override
 	public int hashCode() {
 		return Objects.hash(this.path);
@@ -32,21 +45,8 @@ public class UntaggedPhotoWrapper {
 			return false;
 		}
 		UntaggedPhotoWrapper other = (UntaggedPhotoWrapper) obj;
-		if (path == null) {
-			if (other.path != null) {
-				return false;
-			}
-		} else if (!path.equals(other.path)) {
-			return false;
-		}
-		return true;
-	}
 
-	public UntaggedPhotoWrapper(Path path, LocalDateTime fileDateTime, Metadata metadata) {
-		super();
-		this.path = path;
-		this.fileDateTime = fileDateTime;
-		this.metadata = metadata;
+		return Objects.equals(path, other.path);
 	}
 
 	public Metadata getMetadata() {
@@ -56,12 +56,6 @@ public class UntaggedPhotoWrapper {
 	public void setMetadata(Metadata metadata) {
 		this.metadata = metadata;
 	}
-
-	private Path path;
-
-	private LocalDateTime fileDateTime;
-
-	private Metadata metadata;
 
 	public Path getPath() {
 		return path;

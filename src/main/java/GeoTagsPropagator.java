@@ -40,7 +40,6 @@ import org.apache.commons.imaging.formats.jpeg.JpegImageMetadata;
 import org.apache.commons.imaging.formats.jpeg.exif.ExifRewriter;
 import org.apache.commons.imaging.formats.tiff.TiffImageMetadata;
 import org.apache.commons.imaging.formats.tiff.write.TiffOutputSet;
-import org.apache.commons.imaging.util.IoUtils;
 
 import com.drew.imaging.FileType;
 import com.drew.imaging.FileTypeDetector;
@@ -63,8 +62,6 @@ public class GeoTagsPropagator {
 	private static Path startDirPath;
 
 	private static Map<Path, BasicFileAttributeView> pathBasicFileAttributeViewMap = new LinkedHashMap<>();
-	// private static Map<Path, BasicFileAttributes> pathBasicFileAttributesMap
-	// = new LinkedHashMap<>();
 
 	private static List<GeoTaggedPhotoWrapper> geotaggedPathsList = new ArrayList<>();
 	// we process local date time, not path
@@ -127,17 +124,12 @@ public class GeoTagsPropagator {
 	private static void processFiles() throws IOException {
 
 		try (Stream<Path> nestedFilesStreamPath = Files.walk(startDirPath);) {
-			nestedFilesStreamPath.forEach(t -> {
-				fillPathLists(t);
-			});
+			nestedFilesStreamPath.forEach(GeoTagsPropagator::fillPathLists);
 		}
-		;
 
 		boolean needReturn = false;
 
 		if (geotaggedPathsList.isEmpty()) {
-			// LOG.log(Level.INFO, "No geotagged photos found at " +
-			// pathString);
 			needReturn = true;
 
 		}
@@ -156,59 +148,49 @@ public class GeoTagsPropagator {
 			return;
 		}
 
-		tagUntaggedFiles();
+		tagUntaggedFilesStream();
 		processUntaggedFilesDates();
 
 	}
 
-	private static void tagUntaggedFiles() {
+	private static void tagUntaggedFilesStream() {
 
-		// String timeFormat = "Untagged file %s with local date time %s";
+		Map<GeoLocation, Long> minutesDiffMap = new HashMap<>();
 
-		untaggedPathsList.stream().forEach(t -> {
-			UntaggedPhotoWrapper untaggedWrapper = t;
-			LocalDateTime untaggedLDT = untaggedWrapper.getFileDateTime();
-			Path unTaggedPath = untaggedWrapper.getPath();
-			// List<Map.Entry<GeoLocation, Long>> minutesDiffList = new
-			// ArrayList<>();
+		untaggedPathsList.stream().forEach(t -> tagUntaggedPath(t, minutesDiffMap));
 
-			// LOG.log(Level.INFO, String.format(timeFormat,
-			// untaggedWrapper.getPath().toString(), untaggedLDT));
+	}
 
-			Map<GeoLocation, Long> minutesDiffMap = new HashMap<>();
+	private static void tagUntaggedPath(UntaggedPhotoWrapper t, Map<GeoLocation, Long> minutesDiffMap) {
+		UntaggedPhotoWrapper untaggedWrapper = t;
+		LocalDateTime untaggedLDT = untaggedWrapper.getFileDateTime();
 
-			// let's stream through tagged photos
-			geotaggedPathsList.stream().forEach(g -> {
-				GeoTaggedPhotoWrapper geoTagged = g;
-				LocalDateTime taggedLDT = geoTagged.getFileDateTime();
-				GeoLocation geoLocation = geoTagged.getGeoLocation();
-				GpsDirectory gpsDirectory = geoTagged.getGpsDirectory();
+		// let's stream through tagged photos
+		geotaggedPathsList.stream().forEach(g -> {
+			GeoTaggedPhotoWrapper geoTagged = g;
+			LocalDateTime taggedLDT = geoTagged.getFileDateTime();
+			GeoLocation geoLocation = geoTagged.getGeoLocation();
 
-				long minutesDiff = Math.abs(taggedLDT.until(untaggedLDT, ChronoUnit.MINUTES));
-				// difference must be not less than 1 hour, this is the time to
-				// change location
-				if (minutesDiff <= 60) {
-					// Here we fill some array that can be sorted.
-					// Entry<GeoLocation, Long> newEntry = new
-					// HashMap.Entry<GeoLocation, Long>(geoLocation,
-					// minutesDiff);
-					minutesDiffMap.put(geoLocation, minutesDiff);
-				}
-			});
+			long minutesDiff = Math.abs(taggedLDT.until(untaggedLDT, ChronoUnit.MINUTES));
+			// difference must be not less than 1 hour, this is the time to
+			// change location
+			if (minutesDiff <= 60) {
+				// Here we fill some array that can be sorted.
 
-			// converting map to list for sorting
-			List<Map.Entry<GeoLocation, Long>> minutesDiffList = new ArrayList<>(minutesDiffMap.entrySet());
-			Collections.sort(minutesDiffList, (e1, e2) -> Long.compare(e1.getValue(), e2.getValue()));
-
-			Optional<Entry<GeoLocation, Long>> optionalEntry = minutesDiffList.stream().findFirst();
-			if (optionalEntry.isPresent()) {
-				// here we should assign geolocation.
-				// GpsDirectory gpsDirectory = optionalEntry.get().getKey();
-				GeoLocation geoLocation = optionalEntry.get().getKey();
-				assignGeoLocation(geoLocation, untaggedWrapper);
+				minutesDiffMap.put(geoLocation, minutesDiff);
 			}
-
 		});
+
+		// converting map to list for sorting
+		List<Map.Entry<GeoLocation, Long>> minutesDiffList = new ArrayList<>(minutesDiffMap.entrySet());
+		Collections.sort(minutesDiffList, (e1, e2) -> Long.compare(e1.getValue(), e2.getValue()));
+
+		Optional<Entry<GeoLocation, Long>> optionalEntry = minutesDiffList.stream().findFirst();
+		if (optionalEntry.isPresent()) {
+			// here we should assign geolocation.
+			GeoLocation geoLocation = optionalEntry.get().getKey();
+			assignGeoLocation(geoLocation, untaggedWrapper);
+		}
 
 	}
 
@@ -232,17 +214,10 @@ public class GeoTagsPropagator {
 
 		TiffOutputSet outputSet = null;
 
-		OutputStream os = null;
-		boolean canThrow = false;
-
 		Path path = untaggedWrapper.getPath();
 		File imageFile = path.toFile();
 
 		try {
-			// ImageMetadata metadata = (ImageMetadata)
-			// Imaging.getMetadata(imageFile);
-			//
-			// JpegImageMetadata jpegMetadata = (JpegImageMetadata) metadata;
 
 			JpegImageMetadata jpegMetadata = (JpegImageMetadata) Imaging.getMetadata(imageFile);
 
@@ -251,62 +226,70 @@ public class GeoTagsPropagator {
 				final TiffImageMetadata exif = jpegMetadata.getExif();
 
 				if (null != exif) {
-					// TiffImageMetadata class is immutable (read-only).
-					// TiffOutputSet class represents the Exif data to write.
-					//
-					// Usually, we want to update existing Exif metadata by
-					// changing
-					// the values of a few fields, or adding a field.
-					// In these cases, it is easiest to use getOutputSet() to
-					// start with a "copy" of the fields read from the image.
-					try {
-						outputSet = exif.getOutputSet();
-					} catch (ImageWriteException e) {
-						LOG.log(Level.WARNING, "Could not get EXIF output set from " + path.toString(), e);
-						return;
-					}
-				}
-
-				else {
-					// if file does not contain any exif metadata, we create an
-					// empty
-					// set of exif metadata. Otherwise, we keep all of the other
-					// existing tags.
-					if (outputSet == null) {
-						outputSet = new TiffOutputSet();
-					}
+					outputSet = getTiffOutputSet(exif, path);
+				} else {
+					outputSet = new TiffOutputSet();
 				}
 
 				outputSet.setGPSInDegrees(geoLocation.getLongitude(), geoLocation.getLatitude());
 
-				String formatTmp = "%stmp";
-				File outFile = new File(String.format(formatTmp, path.toString()));
-
-				os = new FileOutputStream(outFile);
-				os = new BufferedOutputStream(os);
-
-				new ExifRewriter().updateExifMetadataLossless(imageFile, os, outputSet);
-
-				// renaming from temp file
-				Files.move(outFile.toPath(), path, StandardCopyOption.REPLACE_EXISTING);
-				assignedGPSCounter++;
 			}
 
-		} catch (ImageReadException | IOException | ImageWriteException e) {
+		} catch (ImageReadException | IOException |
+
+				ImageWriteException e) {
 			LOG.log(Level.WARNING, "Could not get/set image metadata from " + path.toString(), e);
 			return;
 		}
 
-		finally
+		String formatTmp = "%stmp";
+		File outFile = new File(String.format(formatTmp, path.toString()));
+
+		try (OutputStream os = new BufferedOutputStream(new FileOutputStream(outFile));)
 
 		{
-			try {
-				IoUtils.closeQuietly(canThrow, os);
-			} catch (IOException e) {
-				LOG.log(Level.WARNING, "Could not close image file " + path.toString(), e);
-			}
+			new ExifRewriter().updateExifMetadataLossless(imageFile, os, outputSet);
+
 		}
 
+		catch (ImageReadException | ImageWriteException e) {
+			LOG.log(Level.WARNING, "Error update exif metadata " + outFile.getAbsolutePath(), e);
+
+		} catch (IOException e) {
+			LOG.log(Level.WARNING, "Error I/O file " + outFile.getAbsolutePath(), e);
+		}
+
+		// renaming from temp file
+		try {
+			Files.move(outFile.toPath(), path, StandardCopyOption.REPLACE_EXISTING);
+		} catch (IOException e) {
+			LOG.log(Level.WARNING, "Could not move image file " + outFile.getAbsolutePath(), e);
+		}
+
+		assignedGPSCounter++;
+
+	}
+
+	private static TiffOutputSet getTiffOutputSet(TiffImageMetadata exif, Path path) {
+		// TiffImageMetadata class is immutable (read-only).
+		// TiffOutputSet class represents the Exif data to write.
+		//
+		// Usually, we want to update existing Exif metadata by
+		// changing
+		// the values of a few fields, or adding a field.
+		// In these cases, it is easiest to use getOutputSet() to
+		// start with a "copy" of the fields read from the image.
+
+		TiffOutputSet outputSet;
+
+		try {
+			outputSet = exif.getOutputSet();
+		} catch (ImageWriteException e) {
+			LOG.log(Level.WARNING, "Could not get EXIF output set from " + path.toString(), e);
+			return null;
+		}
+
+		return outputSet;
 	}
 
 	private static void fillPathLists(Path path) {
@@ -354,20 +337,13 @@ public class GeoTagsPropagator {
 
 		Collection<ExifSubIFDDirectory> exifDirectories = metadata.getDirectoriesOfType(ExifSubIFDDirectory.class);
 		if (exifDirectories.isEmpty()) {
-			// LOG.log(Level.WARNING, "No ExifSubIFDDirectory for " +
-			// path.toString());
-			// return;
 			return exifLDT;
 		}
 
 		ExifSubIFDDirectory exifDir = exifDirectories.iterator().next();
 
 		Date exifDate = exifDir.getDate(ExifDirectoryBase.TAG_DATETIME_ORIGINAL);
-
-		// LOG.log(Level.INFO, path.toString() + " - " + exifDate);
-		exifLDT = convertDateToLocalDateTimeUTC0(exifDate);
-
-		return exifLDT;
+		return convertDateToLocalDateTimeUTC0(exifDate);
 
 	}
 
@@ -397,60 +373,13 @@ public class GeoTagsPropagator {
 		GpsDirectory gpsDir = gpsDirectories.iterator().next();
 		GeoLocation extractedGeoLocation = gpsDir.getGeoLocation();
 
-		if (extractedGeoLocation != null && !extractedGeoLocation.isZero()) {
-
-		} else {
-
+		if (!(extractedGeoLocation != null && !extractedGeoLocation.isZero())) {
 			return;
 		}
 
-		LocalDateTime correctedLDT = null;
+		LocalDateTime correctedLDT = getCcorrectedLDT(gpsDir, exifLDT);
 
-		Date gpsDate = gpsDir.getGpsDate();
-
-		if (gpsDate != null) {
-			LocalDateTime gpsLDT = convertDateToLocalDateTime(gpsDate);
-
-			// Some devices convert Gps information from satellites directly as
-			// local date time, thus
-			// date/time of shooting is several hours ahead/before local date
-			// time.
-			long minutesDiff = gpsLDT.until(exifLDT, ChronoUnit.MINUTES);
-			// float hours = minutesDiff / 60;
-
-			if (minutesDiff == 0) {
-				correctedLDT = gpsLDT;
-
-			}
-			// if we have hours without remainder
-			else if (minutesDiff % 60 == 0) {
-				correctedLDT = exifLDT;
-			} else {
-				correctedLDT = gpsLDT;
-			}
-		} else {
-			// gps date is null
-			correctedLDT = exifLDT;
-		}
-
-		// here we should process geolocation and round it somehow up to 10-20
-		// meters.
-
-		// (double) Math.round(value * rounding) / rounding;
-
-		double unRoundedLatitude = extractedGeoLocation.getLatitude();
-		double roundedLatitude = roundTo4DecimalPlaces(unRoundedLatitude);
-
-		double unRoundedLongitude = extractedGeoLocation.getLongitude();
-		double roundedLongitude = roundTo4DecimalPlaces(unRoundedLongitude);
-
-		// LOG.log(Level.INFO, "La before: " + unRoundedLatitude + " , after " +
-		// roundedLatitude);
-		// LOG.log(Level.INFO, "Lo before: " + unRoundedLongitude + " , after "
-		// + roundedLongitude);
-
-		// counstructing rounded geolocation for path.
-		GeoLocation roundedGeoLocation = new GeoLocation(roundedLatitude, roundedLongitude);
+		GeoLocation roundedGeoLocation = getRoundedGeoLocation(extractedGeoLocation);
 
 		GeoTaggedPhotoWrapper geoWrapper = new GeoTaggedPhotoWrapper(path, correctedLDT, roundedGeoLocation, gpsDir);
 		geotaggedPathsList.add(geoWrapper);
@@ -460,6 +389,58 @@ public class GeoTagsPropagator {
 
 		assignCommonFileTime(pathBFAView, universalFT, path);
 
+	}
+
+	private static GeoLocation getRoundedGeoLocation(GeoLocation extractedGeoLocation) {
+
+		// here we should process geolocation and round it somehow up to 10-20
+		// meters.
+
+		double unRoundedLatitude = extractedGeoLocation.getLatitude();
+		double roundedLatitude = roundTo4DecimalPlaces(unRoundedLatitude);
+
+		double unRoundedLongitude = extractedGeoLocation.getLongitude();
+		double roundedLongitude = roundTo4DecimalPlaces(unRoundedLongitude);
+
+		// counstructing rounded geolocation for path.
+		return new GeoLocation(roundedLatitude, roundedLongitude);
+	}
+
+	private static LocalDateTime getCcorrectedLDT(GpsDirectory gpsDir, LocalDateTime exifLDT) {
+		LocalDateTime correctedLDT;
+
+		Date gpsDate = gpsDir.getGpsDate();
+
+		if (exifLDT == null && gpsDate == null) {
+			return null; // it is null
+		}
+
+		if (gpsDate != null) {
+			LocalDateTime gpsLDT = convertDateToLocalDateTime(gpsDate);
+
+			// Some devices convert Gps information from satellites directly as
+			// local date time, thus
+			// date/time of shooting is several hours ahead/before local date
+			// time.
+
+			if (exifLDT == null) {
+				// there is nothing to decide, return gpsLDT
+				return gpsLDT;
+			}
+
+			long minutesDiff = gpsLDT.until(exifLDT, ChronoUnit.MINUTES);
+
+			if (minutesDiff % 60 == 0) {
+				correctedLDT = exifLDT;
+			} else {
+				correctedLDT = gpsLDT;
+			}
+		} else {
+			// gps date is null
+			correctedLDT = exifLDT;
+		}
+
+		return correctedLDT;
 	}
 
 	private static void assignCommonFileTime(BasicFileAttributeView pathBFAView, FileTime universalFT, Path path) {
@@ -473,24 +454,21 @@ public class GeoTagsPropagator {
 
 	private static FileTime getFileTimeFromLDT(LocalDateTime localDateTime) {
 		ZonedDateTime newGeneratedZDT = ZonedDateTime.of(localDateTime, defaultZoneID);
-		FileTime newGeneratedFT = FileTime.from(newGeneratedZDT.toInstant());
+		return FileTime.from(newGeneratedZDT.toInstant());
 
-		return newGeneratedFT;
 	}
 
 	private static LocalDateTime convertDateToLocalDateTime(Date date) {
 
 		Instant instantGps = date.toInstant();
-		LocalDateTime gpsLDT = LocalDateTime.ofInstant(instantGps, defaultZoneID);
+		return LocalDateTime.ofInstant(instantGps, defaultZoneID);
 
-		return gpsLDT;
 	}
 
 	private static LocalDateTime convertDateToLocalDateTimeUTC0(Date date) {
 		Instant instantGps = date.toInstant();
-		LocalDateTime gpsLDT = LocalDateTime.ofInstant(instantGps, ZoneId.of("UTC"));
+		return LocalDateTime.ofInstant(instantGps, ZoneId.of("UTC"));
 
-		return gpsLDT;
 	}
 
 	private static double roundTo4DecimalPlaces(double value) {

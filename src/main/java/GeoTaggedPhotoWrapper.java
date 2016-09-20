@@ -15,6 +15,24 @@ import com.drew.metadata.exif.GpsDirectory;
  */
 public class GeoTaggedPhotoWrapper {
 
+	private Path path;
+
+	private LocalDateTime fileDateTime;
+
+	private GeoLocation geoLocation;
+
+	private GpsDirectory gpsDirectory;
+
+	public GeoTaggedPhotoWrapper(Path path, LocalDateTime fileDateTime, GeoLocation geoLocation,
+			GpsDirectory gpsDirectory) {
+
+		super();
+		this.path = path;
+		this.fileDateTime = fileDateTime;
+		this.geoLocation = geoLocation;
+		this.gpsDirectory = gpsDirectory;
+	}
+
 	@Override
 	public int hashCode() {
 		return Objects.hash(this.path, this.fileDateTime, this.geoLocation, this.gpsDirectory);
@@ -32,53 +50,12 @@ public class GeoTaggedPhotoWrapper {
 			return false;
 		}
 		GeoTaggedPhotoWrapper other = (GeoTaggedPhotoWrapper) obj;
-		if (fileDateTime == null) {
-			if (other.fileDateTime != null) {
-				return false;
-			}
-		} else if (!fileDateTime.equals(other.fileDateTime)) {
-			return false;
-		}
-		if (geoLocation == null) {
-			if (other.geoLocation != null) {
-				return false;
-			}
-		} else if (!geoLocation.equals(other.geoLocation)) {
-			return false;
-		}
-		if (gpsDirectory == null) {
-			if (other.gpsDirectory != null) {
-				return false;
-			}
-		} else if (!gpsDirectory.equals(other.gpsDirectory)) {
-			return false;
-		}
-		if (path == null) {
-			if (other.path != null) {
-				return false;
-			}
-		} else if (!path.equals(other.path)) {
-			return false;
-		}
-		return true;
+		return Objects.equals(fileDateTime, other.fileDateTime) && Objects.equals(geoLocation, other.geoLocation)
+				&& Objects.equals(gpsDirectory, other.gpsDirectory) && Objects.equals(path, other.path);
 	}
-
-	private Path path;
-
-	private LocalDateTime fileDateTime;
 
 	public Path getPath() {
 		return path;
-	}
-
-	public GeoTaggedPhotoWrapper(Path path, LocalDateTime fileDateTime, GeoLocation geoLocation,
-			GpsDirectory gpsDirectory) {
-
-		super();
-		this.path = path;
-		this.fileDateTime = fileDateTime;
-		this.geoLocation = geoLocation;
-		this.gpsDirectory = gpsDirectory;
 	}
 
 	public void setPath(Path path) {
@@ -100,10 +77,6 @@ public class GeoTaggedPhotoWrapper {
 	public void setGeoLocation(GeoLocation geoLocation) {
 		this.geoLocation = geoLocation;
 	}
-
-	private GeoLocation geoLocation;
-
-	private GpsDirectory gpsDirectory;
 
 	public GpsDirectory getGpsDirectory() {
 		return gpsDirectory;
