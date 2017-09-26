@@ -15,6 +15,6 @@ Additional feature is that this software reads the actual date the photo was tak
 
 System requirements:
 - Java 9;
-Maven 3.5+
+- Maven 3.5+.
 
 To build runnable jar file you need to have Maven installed. Use command "mvn clean compile assembly:single" in command shell, without double quotes.
