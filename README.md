@@ -13,4 +13,8 @@ This software assumes that if photos were taken within an hour before and after 
 
 Additional feature is that this software reads the actual date the photo was taken and puts it as file modify date time. 
 
+System requirements:
+- Java 9;
+Maven 3.5+
+
 To build runnable jar file you need to have Maven installed. Use command "mvn clean compile assembly:single" in command shell, without double quotes.
