@@ -12,3 +12,5 @@ Use case algorithm is following:
 This software assumes that if photos were taken within an hour before and after from the geotagged one - this is still the same place and it performs minor rounding of latitude and longitude up to the 4th decimal point. This makes GPS position natural when analysing a set of photos. If an untagged photo complies to several geotagged photos, it takes coordinates from the closest photo in time. 
 
 Additional feature is that this software reads the actual date the photo was taken and puts it as file modify date time. 
+
+To build runnable jar file you need to have Maven installed. Use command "mvn clean compile assembly:single" in command shell, without double quotes.
