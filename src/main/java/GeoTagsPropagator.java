@@ -205,31 +205,22 @@ public class GeoTagsPropagator {
 	private static void assignGeoLocation(GeoLocation geoLocation, UntaggedPhotoWrapper untaggedWrapper) {
 
 		TiffOutputSet outputSet = null;
-
 		Path path = untaggedWrapper.getPath();
 		File imageFile = path.toFile();
 
 		try {
-
 			JpegImageMetadata jpegMetadata = (JpegImageMetadata) Imaging.getMetadata(imageFile);
-
 			if (jpegMetadata != null) {
 				// note that exif might be null if no Exif metadata is found.
 				final TiffImageMetadata exif = jpegMetadata.getExif();
-
 				if (null != exif) {
 					outputSet = getTiffOutputSet(exif, path);
 				} else {
 					outputSet = new TiffOutputSet();
 				}
-
 				outputSet.setGPSInDegrees(geoLocation.getLongitude(), geoLocation.getLatitude());
-
 			}
-
-		} catch (ImageReadException | IOException |
-
-				ImageWriteException e) {
+        } catch (ImageReadException | IOException | ImageWriteException e) {
 			LOG.log(Level.WARNING, "Could not get/set image metadata from " + path.toString(), e);
 			return;
 		}
@@ -277,8 +268,8 @@ public class GeoTagsPropagator {
         if (isDirectory)
             return;
 
-		File file = path.toFile();
-		try (InputStream inputStream = new FileInputStream(file);) {
+        File file = path.toFile();
+        try (InputStream inputStream = new FileInputStream(file);) {
 			BufferedInputStream bufferedInputStream = new BufferedInputStream(inputStream);
 			FileType fileType = FileTypeDetector.detectFileType(bufferedInputStream);
 
