@@ -54,7 +54,7 @@ import com.drew.metadata.exif.GpsDirectory;
 public class GeoTagsPropagator {
 
 	private static Logger LOG = Logger.getLogger("GeoTagsPropagator");
-	private static final LinkOption noFollowLinks = LinkOption.NOFOLLOW_LINKS;
+    private static final LinkOption NO_FOLLOW_LINKS = LinkOption.NOFOLLOW_LINKS;
 	private static final TimeZone defaultTimeZone = TimeZone.getDefault();
 	private static final ZoneId defaultZoneID = defaultTimeZone.toZoneId();
 
@@ -98,13 +98,13 @@ public class GeoTagsPropagator {
 		startDirPath = Paths.get(pathString);
 
 		// check existence
-		boolean isExistingPath = Files.exists(startDirPath, noFollowLinks);
+        boolean isExistingPath = Files.exists(startDirPath, NO_FOLLOW_LINKS);
 		if (!isExistingPath) {
 			throw new IllegalArgumentException("Path does not exist or is not accessible: " + pathString);
 		}
 
 		// check if it is a directory
-		boolean isDirectory = Files.isDirectory(startDirPath, noFollowLinks);
+        boolean isDirectory = Files.isDirectory(startDirPath, NO_FOLLOW_LINKS);
 		if (!isDirectory) {
 			throw new IllegalArgumentException("Path is not a directory: " + pathString);
 		}
@@ -131,7 +131,6 @@ public class GeoTagsPropagator {
 
 		if (geotaggedPathsList.isEmpty()) {
 			needReturn = true;
-
 		}
 
 		if (untaggedPathsList.isEmpty()) {
@@ -150,15 +149,11 @@ public class GeoTagsPropagator {
 
 		tagUntaggedFilesStream();
 		processUntaggedFilesDates();
-
 	}
 
 	private static void tagUntaggedFilesStream() {
-
 		Map<GeoLocation, Long> minutesDiffMap = new HashMap<>();
-
 		untaggedPathsList.stream().forEach(t -> tagUntaggedPath(t, minutesDiffMap));
-
 	}
 
 	private static void tagUntaggedPath(UntaggedPhotoWrapper t, Map<GeoLocation, Long> minutesDiffMap) {
@@ -191,7 +186,6 @@ public class GeoTagsPropagator {
 			GeoLocation geoLocation = optionalEntry.get().getKey();
 			assignGeoLocation(geoLocation, untaggedWrapper);
 		}
-
 	}
 
 	private static void processUntaggedFilesDates() {
@@ -206,7 +200,6 @@ public class GeoTagsPropagator {
 			if (bfaView != null) {
 				assignCommonFileTime(bfaView, universalFT, unTaggedPath);
 			}
-
 		});
 	}
 
@@ -279,22 +272,17 @@ public class GeoTagsPropagator {
 		// the values of a few fields, or adding a field.
 		// In these cases, it is easiest to use getOutputSet() to
 		// start with a "copy" of the fields read from the image.
-
-		TiffOutputSet outputSet;
-
 		try {
-			outputSet = exif.getOutputSet();
+            return exif.getOutputSet();
 		} catch (ImageWriteException e) {
 			LOG.log(Level.WARNING, "Could not get EXIF output set from " + path.toString(), e);
 			return null;
 		}
-
-		return outputSet;
 	}
 
 	private static void fillPathLists(Path path) {
 		// omitting directories
-		boolean isDirectory = Files.isDirectory(path, noFollowLinks);
+        boolean isDirectory = Files.isDirectory(path, NO_FOLLOW_LINKS);
 		if (isDirectory) {
 			return;
 		}
@@ -439,7 +427,6 @@ public class GeoTagsPropagator {
 			// gps date is null
 			correctedLDT = exifLDT;
 		}
-
 		return correctedLDT;
 	}
 
@@ -455,20 +442,16 @@ public class GeoTagsPropagator {
 	private static FileTime getFileTimeFromLDT(LocalDateTime localDateTime) {
 		ZonedDateTime newGeneratedZDT = ZonedDateTime.of(localDateTime, defaultZoneID);
 		return FileTime.from(newGeneratedZDT.toInstant());
-
 	}
 
 	private static LocalDateTime convertDateToLocalDateTime(Date date) {
-
 		Instant instantGps = date.toInstant();
 		return LocalDateTime.ofInstant(instantGps, defaultZoneID);
-
 	}
 
 	private static LocalDateTime convertDateToLocalDateTimeUTC0(Date date) {
 		Instant instantGps = date.toInstant();
 		return LocalDateTime.ofInstant(instantGps, ZoneId.of("UTC"));
-
 	}
 
 	private static double roundTo4DecimalPlaces(double value) {

@@ -5,10 +5,6 @@ import java.util.Objects;
 import com.drew.metadata.Metadata;
 
 /**
- *
- */
-
-/**
  * @author duplyk.a
  *
  *         Class to hold properties of untagged photos
@@ -72,5 +68,4 @@ public class UntaggedPhotoWrapper {
 	public void setFileDateTime(LocalDateTime fileDateTime) {
 		this.fileDateTime = fileDateTime;
 	}
-
 }
