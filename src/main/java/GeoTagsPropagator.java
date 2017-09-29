@@ -55,8 +55,7 @@ public class GeoTagsPropagator {
 
 	private static Logger LOG = Logger.getLogger("GeoTagsPropagator");
     private static final LinkOption NO_FOLLOW_LINKS = LinkOption.NOFOLLOW_LINKS;
-	private static final TimeZone defaultTimeZone = TimeZone.getDefault();
-	private static final ZoneId defaultZoneID = defaultTimeZone.toZoneId();
+    private static final ZoneId DEFAULT_ZONE_ID = TimeZone.getDefault().toZoneId();
 
 	private static String pathString;
 	private static Path startDirPath;
@@ -238,16 +237,10 @@ public class GeoTagsPropagator {
 		String formatTmp = "%stmp";
 		File outFile = new File(String.format(formatTmp, path.toString()));
 
-		try (OutputStream os = new BufferedOutputStream(new FileOutputStream(outFile));)
-
-		{
+        try (OutputStream os = new BufferedOutputStream(new FileOutputStream(outFile));) {
 			new ExifRewriter().updateExifMetadataLossless(imageFile, os, outputSet);
-
-		}
-
-		catch (ImageReadException | ImageWriteException e) {
+        } catch (ImageReadException | ImageWriteException e) {
 			LOG.log(Level.WARNING, "Error update exif metadata " + outFile.getAbsolutePath(), e);
-
 		} catch (IOException e) {
 			LOG.log(Level.WARNING, "Error I/O file " + outFile.getAbsolutePath(), e);
 		}
@@ -258,9 +251,7 @@ public class GeoTagsPropagator {
 		} catch (IOException e) {
 			LOG.log(Level.WARNING, "Could not move image file " + outFile.getAbsolutePath(), e);
 		}
-
 		assignedGPSCounter++;
-
 	}
 
 	private static TiffOutputSet getTiffOutputSet(TiffImageMetadata exif, Path path) {
@@ -283,9 +274,8 @@ public class GeoTagsPropagator {
 	private static void fillPathLists(Path path) {
 		// omitting directories
         boolean isDirectory = Files.isDirectory(path, NO_FOLLOW_LINKS);
-		if (isDirectory) {
-			return;
-		}
+        if (isDirectory)
+            return;
 
 		File file = path.toFile();
 		try (InputStream inputStream = new FileInputStream(file);) {
@@ -312,11 +302,9 @@ public class GeoTagsPropagator {
 		if (gpsDirectories.isEmpty()) {
 			processUntaggedFile(path, metadata);
 			// it is a usual file without geotags
-
 		} else {
 			processGeoTaggedFile(path, gpsDirectories, metadata);
 		}
-
 	}
 
 	private static LocalDateTime getExifLDTFromMetadataExtractorMetadata(Metadata metadata) {
@@ -440,13 +428,13 @@ public class GeoTagsPropagator {
 	}
 
 	private static FileTime getFileTimeFromLDT(LocalDateTime localDateTime) {
-		ZonedDateTime newGeneratedZDT = ZonedDateTime.of(localDateTime, defaultZoneID);
+        ZonedDateTime newGeneratedZDT = ZonedDateTime.of(localDateTime, DEFAULT_ZONE_ID);
 		return FileTime.from(newGeneratedZDT.toInstant());
 	}
 
 	private static LocalDateTime convertDateToLocalDateTime(Date date) {
 		Instant instantGps = date.toInstant();
-		return LocalDateTime.ofInstant(instantGps, defaultZoneID);
+        return LocalDateTime.ofInstant(instantGps, DEFAULT_ZONE_ID);
 	}
 
 	private static LocalDateTime convertDateToLocalDateTimeUTC0(Date date) {
