@@ -142,20 +142,16 @@ public class GeoTagsPropagator {
 
 		if (needReturn) {
 			// before quitting - we process dates.
-			processUntaggedFilesDates();
+            untaggedPathsList.forEach(GeoTagsPropagator::assignFileDate);
 			return;
 		}
 
-		tagUntaggedFilesStream();
-		processUntaggedFilesDates();
+        untaggedPathsList.forEach(GeoTagsPropagator::tagUntaggedPath);
+        untaggedPathsList.forEach(GeoTagsPropagator::assignFileDate);
 	}
 
-	private static void tagUntaggedFilesStream() {
-		Map<GeoLocation, Long> minutesDiffMap = new HashMap<>();
-		untaggedPathsList.stream().forEach(t -> tagUntaggedPath(t, minutesDiffMap));
-	}
-
-	private static void tagUntaggedPath(UntaggedPhotoWrapper t, Map<GeoLocation, Long> minutesDiffMap) {
+    private static void tagUntaggedPath(UntaggedPhotoWrapper t) {
+        Map<GeoLocation, Long> minutesDiffMap = new HashMap<>();
 		UntaggedPhotoWrapper untaggedWrapper = t;
 		LocalDateTime untaggedLDT = untaggedWrapper.getFileDateTime();
 
@@ -170,11 +166,11 @@ public class GeoTagsPropagator {
 			// change location
 			if (minutesDiff <= 60) {
 				// Here we fill some array that can be sorted.
-
 				minutesDiffMap.put(geoLocation, minutesDiff);
 			}
 		});
 
+        // http://download.java.net/java/jdk9/docs/api/java/util/AbstractMap.SimpleEntry.html
 		// converting map to list for sorting
 		List<Map.Entry<GeoLocation, Long>> minutesDiffList = new ArrayList<>(minutesDiffMap.entrySet());
 		Collections.sort(minutesDiffList, (e1, e2) -> Long.compare(e1.getValue(), e2.getValue()));
@@ -187,20 +183,13 @@ public class GeoTagsPropagator {
 		}
 	}
 
-	private static void processUntaggedFilesDates() {
-		untaggedPathsList.stream().forEach(t -> {
-			UntaggedPhotoWrapper untaggedWrapper = t;
-			LocalDateTime untaggedLDT = untaggedWrapper.getFileDateTime();
-			Path unTaggedPath = untaggedWrapper.getPath();
-
-			// here we assign file attributes.
-			FileTime universalFT = getFileTimeFromLDT(untaggedLDT);
-			BasicFileAttributeView bfaView = pathBasicFileAttributeViewMap.get(unTaggedPath);
-			if (bfaView != null) {
-				assignCommonFileTime(bfaView, universalFT, unTaggedPath);
-			}
-		});
-	}
+    private static void assignFileDate(UntaggedPhotoWrapper untaggedWrapper) {
+        Path unTaggedPath = untaggedWrapper.getPath();
+        // here we assign file attributes.
+        Optional.ofNullable(pathBasicFileAttributeViewMap.get(unTaggedPath))
+                .ifPresent(bfaView -> assignCommonFileTime(bfaView,
+                        getFileTimeFromLDT(untaggedWrapper.getFileDateTime()), unTaggedPath));
+    }
 
 	private static void assignGeoLocation(GeoLocation geoLocation, UntaggedPhotoWrapper untaggedWrapper) {
 
