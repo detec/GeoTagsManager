@@ -20,18 +20,17 @@ import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.TimeZone;
+import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
+import java.util.AbstractMap.SimpleEntry;
 
 import org.apache.commons.imaging.ImageReadException;
 import org.apache.commons.imaging.ImageWriteException;
@@ -57,7 +56,7 @@ public class GeoTagsPropagator {
     private static final LinkOption NO_FOLLOW_LINKS = LinkOption.NOFOLLOW_LINKS;
     private static final ZoneId DEFAULT_ZONE_ID = TimeZone.getDefault().toZoneId();
 
-	private static String pathString;
+    private static String pathString;
 	private static Path startDirPath;
 
 	private static Map<Path, BasicFileAttributeView> pathBasicFileAttributeViewMap = new LinkedHashMap<>();
@@ -150,37 +149,17 @@ public class GeoTagsPropagator {
         untaggedPathsList.forEach(GeoTagsPropagator::assignFileDate);
 	}
 
-    private static void tagUntaggedPath(UntaggedPhotoWrapper t) {
-        Map<GeoLocation, Long> minutesDiffMap = new HashMap<>();
-		UntaggedPhotoWrapper untaggedWrapper = t;
-		LocalDateTime untaggedLDT = untaggedWrapper.getFileDateTime();
+    private static void tagUntaggedPath(UntaggedPhotoWrapper untaggedWrapper) {
+        Function<LocalDateTime, Long> minutesDiffFunction = taggedLDT -> Math
+                .abs(taggedLDT.until(untaggedWrapper.getFileDateTime(), ChronoUnit.MINUTES));
 
-		// let's stream through tagged photos
-		geotaggedPathsList.stream().forEach(g -> {
-			GeoTaggedPhotoWrapper geoTagged = g;
-			LocalDateTime taggedLDT = geoTagged.getFileDateTime();
-			GeoLocation geoLocation = geoTagged.getGeoLocation();
-
-			long minutesDiff = Math.abs(taggedLDT.until(untaggedLDT, ChronoUnit.MINUTES));
-			// difference must be not less than 1 hour, this is the time to
-			// change location
-			if (minutesDiff <= 60) {
-				// Here we fill some array that can be sorted.
-				minutesDiffMap.put(geoLocation, minutesDiff);
-			}
-		});
-
-        // http://download.java.net/java/jdk9/docs/api/java/util/AbstractMap.SimpleEntry.html
-		// converting map to list for sorting
-		List<Map.Entry<GeoLocation, Long>> minutesDiffList = new ArrayList<>(minutesDiffMap.entrySet());
-		Collections.sort(minutesDiffList, (e1, e2) -> Long.compare(e1.getValue(), e2.getValue()));
-
-		Optional<Entry<GeoLocation, Long>> optionalEntry = minutesDiffList.stream().findFirst();
-		if (optionalEntry.isPresent()) {
-			// here we should assign geolocation.
-			GeoLocation geoLocation = optionalEntry.get().getKey();
-			assignGeoLocation(geoLocation, untaggedWrapper);
-		}
+        // difference must be not less than 1 hour, this is the time to change
+        // location
+        geotaggedPathsList.stream().filter(geoTagged -> minutesDiffFunction.apply(geoTagged.getFileDateTime()) <= 60)
+                .map(geoTagged -> new SimpleEntry<GeoLocation, Long>(geoTagged.getGeoLocation(),
+                        minutesDiffFunction.apply(geoTagged.getFileDateTime())))
+                .sorted((e1, e2) -> Long.compare(e1.getValue(), e2.getValue())).findFirst()
+                .ifPresent(entry -> assignGeoLocation(entry.getKey(), untaggedWrapper));
 	}
 
     private static void assignFileDate(UntaggedPhotoWrapper untaggedWrapper) {
