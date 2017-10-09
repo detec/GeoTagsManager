@@ -268,18 +268,14 @@ public class GeoTagsPropagator {
 
 	private static LocalDateTime getExifLDTFromMetadataExtractorMetadata(Metadata metadata) {
 		// from https://github.com/drewnoakes/metadata-extractor/wiki/FAQ
-		LocalDateTime exifLDT = null;
-
 		Collection<ExifSubIFDDirectory> exifDirectories = metadata.getDirectoriesOfType(ExifSubIFDDirectory.class);
 		if (exifDirectories.isEmpty()) {
-			return exifLDT;
+            return null;
 		}
 
 		ExifSubIFDDirectory exifDir = exifDirectories.iterator().next();
-
 		Date exifDate = exifDir.getDate(ExifDirectoryBase.TAG_DATETIME_ORIGINAL);
 		return convertDateToLocalDateTimeUTC0(exifDate);
-
 	}
 
 	private static void processUntaggedFile(Path path, Metadata metadata) {
@@ -291,9 +287,7 @@ public class GeoTagsPropagator {
 		}
 
 		UntaggedPhotoWrapper untaggedWrapper = new UntaggedPhotoWrapper(path, exifLDT, metadata);
-
 		untaggedPathsList.add(untaggedWrapper);
-
 		pathBasicFileAttributeViewMap.put(path, Files.getFileAttributeView(path, BasicFileAttributeView.class));
 	}
 
@@ -323,21 +317,19 @@ public class GeoTagsPropagator {
 		FileTime universalFT = getFileTimeFromLDT(correctedLDT);
 
 		assignCommonFileTime(pathBFAView, universalFT, path);
-
 	}
 
 	private static GeoLocation getRoundedGeoLocation(GeoLocation extractedGeoLocation) {
 
 		// here we should process geolocation and round it somehow up to 10-20
 		// meters.
-
 		double unRoundedLatitude = extractedGeoLocation.getLatitude();
 		double roundedLatitude = roundTo4DecimalPlaces(unRoundedLatitude);
 
 		double unRoundedLongitude = extractedGeoLocation.getLongitude();
 		double roundedLongitude = roundTo4DecimalPlaces(unRoundedLongitude);
 
-		// counstructing rounded geolocation for path.
+        // constructing rounded geolocation for path.
 		return new GeoLocation(roundedLatitude, roundedLongitude);
 	}
 
