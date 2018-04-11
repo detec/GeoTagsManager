@@ -14,23 +14,22 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributeView;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.Collection;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.TimeZone;
 import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
-import java.util.AbstractMap.SimpleEntry;
 
 import org.apache.commons.imaging.ImageReadException;
 import org.apache.commons.imaging.ImageWriteException;
@@ -150,8 +149,8 @@ public class GeoTagsPropagator {
 	}
 
     private static void tagUntaggedPath(UntaggedPhotoWrapper untaggedWrapper) {
-        Function<LocalDateTime, Long> minutesDiffFunction = taggedLDT -> Math
-                .abs(taggedLDT.until(untaggedWrapper.getFileDateTime(), ChronoUnit.MINUTES));
+        Function<Instant, Long> minutesDiffFunction = taggedInstant -> Math
+                .abs(taggedInstant.until(untaggedWrapper.getFileDateTime(), ChronoUnit.MINUTES));
 
         // difference must be not less than 1 hour, this is the time to change
         // location
@@ -167,7 +166,7 @@ public class GeoTagsPropagator {
         // here we assign file attributes.
         Optional.ofNullable(pathBasicFileAttributeViewMap.get(unTaggedPath))
                 .ifPresent(bfaView -> assignCommonFileTime(bfaView,
-                        getFileTimeFromLDT(untaggedWrapper.getFileDateTime()), unTaggedPath));
+                        getFileTimeFromInstant(untaggedWrapper.getFileDateTime()), unTaggedPath));
     }
 
 	private static void assignGeoLocation(GeoLocation geoLocation, UntaggedPhotoWrapper untaggedWrapper) {
@@ -266,7 +265,7 @@ public class GeoTagsPropagator {
 		}
 	}
 
-	private static LocalDateTime getExifLDTFromMetadataExtractorMetadata(Metadata metadata) {
+    private static Instant getExifLDTFromMetadataExtractorMetadata(Metadata metadata) {
 		// from https://github.com/drewnoakes/metadata-extractor/wiki/FAQ
 		Collection<ExifSubIFDDirectory> exifDirectories = metadata.getDirectoriesOfType(ExifSubIFDDirectory.class);
 		if (exifDirectories.isEmpty()) {
@@ -275,26 +274,26 @@ public class GeoTagsPropagator {
 
 		ExifSubIFDDirectory exifDir = exifDirectories.iterator().next();
 		Date exifDate = exifDir.getDate(ExifDirectoryBase.TAG_DATETIME_ORIGINAL);
-		return convertDateToLocalDateTimeUTC0(exifDate);
+        return convertDateToInstant(exifDate);
 	}
 
 	private static void processUntaggedFile(Path path, Metadata metadata) {
 
-		LocalDateTime exifLDT = getExifLDTFromMetadataExtractorMetadata(metadata);
-		if (exifLDT == null) {
+        Instant exifInstant = getExifLDTFromMetadataExtractorMetadata(metadata);
+        if (exifInstant == null) {
 			LOG.log(Level.WARNING, "No ExifSubIFDDirectory for " + path.toString());
 			return;
 		}
 
-		UntaggedPhotoWrapper untaggedWrapper = new UntaggedPhotoWrapper(path, exifLDT, metadata);
+        UntaggedPhotoWrapper untaggedWrapper = new UntaggedPhotoWrapper(path, exifInstant, metadata);
 		untaggedPathsList.add(untaggedWrapper);
 		pathBasicFileAttributeViewMap.put(path, Files.getFileAttributeView(path, BasicFileAttributeView.class));
 	}
 
 	private static void processGeoTaggedFile(Path path, Collection<GpsDirectory> gpsDirectories, Metadata metadata) {
 
-		LocalDateTime exifLDT = getExifLDTFromMetadataExtractorMetadata(metadata);
-		if (exifLDT == null) {
+        Instant exifInstant = getExifLDTFromMetadataExtractorMetadata(metadata);
+        if (exifInstant == null) {
 			LOG.log(Level.WARNING, "No ExifSubIFDDirectory for " + path.toString());
 
 		}
@@ -306,16 +305,15 @@ public class GeoTagsPropagator {
 			return;
 		}
 
-		LocalDateTime correctedLDT = getCcorrectedLDT(gpsDir, exifLDT);
-
+        Instant correctedInstant = getCorrectedInstant(gpsDir, exifInstant);
 		GeoLocation roundedGeoLocation = getRoundedGeoLocation(extractedGeoLocation);
 
-		GeoTaggedPhotoWrapper geoWrapper = new GeoTaggedPhotoWrapper(path, correctedLDT, roundedGeoLocation, gpsDir);
+        GeoTaggedPhotoWrapper geoWrapper = new GeoTaggedPhotoWrapper(path, correctedInstant, roundedGeoLocation,
+                gpsDir);
 		geotaggedPathsList.add(geoWrapper);
 
 		BasicFileAttributeView pathBFAView = Files.getFileAttributeView(path, BasicFileAttributeView.class);
-		FileTime universalFT = getFileTimeFromLDT(correctedLDT);
-
+        FileTime universalFT = getFileTimeFromInstant(correctedInstant);
 		assignCommonFileTime(pathBFAView, universalFT, path);
 	}
 
@@ -333,40 +331,27 @@ public class GeoTagsPropagator {
 		return new GeoLocation(roundedLatitude, roundedLongitude);
 	}
 
-	private static LocalDateTime getCcorrectedLDT(GpsDirectory gpsDir, LocalDateTime exifLDT) {
-		LocalDateTime correctedLDT;
+    private static Instant getCorrectedInstant(GpsDirectory gpsDir, Instant exifInstant) {
+        Instant correctedInstant;
+        Date gpsDate = gpsDir.getGpsDate();
 
-		Date gpsDate = gpsDir.getGpsDate();
+        if (Objects.isNull(exifInstant) && Objects.isNull(gpsDate)) {
+            return null; // it is null
+        }
 
-		if (exifLDT == null && gpsDate == null) {
-			return null; // it is null
-		}
+        if (gpsDate != null) {
+            Instant gpsInstant = convertDateToInstant(gpsDate);
+            if (exifInstant == null) {
+                return gpsInstant;
+            }
 
-		if (gpsDate != null) {
-			LocalDateTime gpsLDT = convertDateToLocalDateTime(gpsDate);
-
-			// Some devices convert Gps information from satellites directly as
-			// local date time, thus
-			// date/time of shooting is several hours ahead/before local date
-			// time.
-
-			if (exifLDT == null) {
-				// there is nothing to decide, return gpsLDT
-				return gpsLDT;
-			}
-
-			long minutesDiff = gpsLDT.until(exifLDT, ChronoUnit.MINUTES);
-
-			if (minutesDiff % 60 == 0) {
-				correctedLDT = exifLDT;
-			} else {
-				correctedLDT = gpsLDT;
-			}
-		} else {
-			// gps date is null
-			correctedLDT = exifLDT;
-		}
-		return correctedLDT;
+            long minutesDiff = gpsInstant.until(exifInstant, ChronoUnit.MINUTES);
+            correctedInstant = (minutesDiff % 60 == 0) ? exifInstant : gpsInstant;
+        } else {
+            // gps date is null
+            correctedInstant = exifInstant;
+        }
+        return correctedInstant;
 	}
 
 	private static void assignCommonFileTime(BasicFileAttributeView pathBFAView, FileTime universalFT, Path path) {
@@ -378,20 +363,13 @@ public class GeoTagsPropagator {
 		}
 	}
 
-	private static FileTime getFileTimeFromLDT(LocalDateTime localDateTime) {
-        ZonedDateTime newGeneratedZDT = ZonedDateTime.of(localDateTime, DEFAULT_ZONE_ID);
-		return FileTime.from(newGeneratedZDT.toInstant());
+    private static FileTime getFileTimeFromInstant(Instant instant) {
+        return Objects.isNull(instant) ? null : FileTime.from(instant);
 	}
 
-	private static LocalDateTime convertDateToLocalDateTime(Date date) {
-		Instant instantGps = date.toInstant();
-        return LocalDateTime.ofInstant(instantGps, DEFAULT_ZONE_ID);
-	}
-
-	private static LocalDateTime convertDateToLocalDateTimeUTC0(Date date) {
-		Instant instantGps = date.toInstant();
-		return LocalDateTime.ofInstant(instantGps, ZoneId.of("UTC"));
-	}
+    private static Instant convertDateToInstant(Date date) {
+        return Objects.isNull(date) ? null : date.toInstant();
+    }
 
 	private static double roundTo4DecimalPlaces(double value) {
 		return Math.round(value * rounding) / rounding;

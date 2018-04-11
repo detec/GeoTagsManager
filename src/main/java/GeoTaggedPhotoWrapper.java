@@ -1,5 +1,5 @@
 import java.nio.file.Path;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Objects;
 
 import com.drew.lang.GeoLocation;
@@ -17,13 +17,13 @@ public class GeoTaggedPhotoWrapper {
 
 	private Path path;
 
-	private LocalDateTime fileDateTime;
+    private Instant fileDateTime;
 
 	private GeoLocation geoLocation;
 
 	private GpsDirectory gpsDirectory;
 
-	public GeoTaggedPhotoWrapper(Path path, LocalDateTime fileDateTime, GeoLocation geoLocation,
+    public GeoTaggedPhotoWrapper(Path path, Instant fileDateTime, GeoLocation geoLocation,
 			GpsDirectory gpsDirectory) {
 
 		super();
@@ -62,11 +62,11 @@ public class GeoTaggedPhotoWrapper {
 		this.path = path;
 	}
 
-	public LocalDateTime getFileDateTime() {
+    public Instant getFileDateTime() {
 		return fileDateTime;
 	}
 
-	public void setFileDateTime(LocalDateTime fileDateTime) {
+    public void setFileDateTime(Instant fileDateTime) {
 		this.fileDateTime = fileDateTime;
 	}
 

@@ -1,5 +1,5 @@
 import java.nio.file.Path;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Objects;
 
 import com.drew.metadata.Metadata;
@@ -13,11 +13,11 @@ public class UntaggedPhotoWrapper {
 
 	private Path path;
 
-	private LocalDateTime fileDateTime;
+    private Instant fileDateTime;
 
 	private Metadata metadata;
 
-	public UntaggedPhotoWrapper(Path path, LocalDateTime fileDateTime, Metadata metadata) {
+    public UntaggedPhotoWrapper(Path path, Instant fileDateTime, Metadata metadata) {
 		super();
 		this.path = path;
 		this.fileDateTime = fileDateTime;
@@ -61,11 +61,11 @@ public class UntaggedPhotoWrapper {
 		this.path = path;
 	}
 
-	public LocalDateTime getFileDateTime() {
+    public Instant getFileDateTime() {
 		return fileDateTime;
 	}
 
-	public void setFileDateTime(LocalDateTime fileDateTime) {
+    public void setFileDateTime(Instant fileDateTime) {
 		this.fileDateTime = fileDateTime;
 	}
 }
