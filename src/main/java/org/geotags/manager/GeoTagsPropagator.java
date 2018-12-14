@@ -1,11 +1,11 @@
+package org.geotags.manager;
+
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -14,7 +14,6 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributeView;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
-import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.AbstractMap.SimpleEntry;
@@ -25,7 +24,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.TimeZone;
 import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -53,7 +51,6 @@ public class GeoTagsPropagator {
 
 	private static Logger LOG = Logger.getLogger("GeoTagsPropagator");
     private static final LinkOption NO_FOLLOW_LINKS = LinkOption.NOFOLLOW_LINKS;
-    private static final ZoneId DEFAULT_ZONE_ID = TimeZone.getDefault().toZoneId();
 
     private static String pathString;
 	private static Path startDirPath;
@@ -118,6 +115,7 @@ public class GeoTagsPropagator {
 		}
 	}
 
+
 	private static void processFiles() throws IOException {
 
 		try (Stream<Path> nestedFilesStreamPath = Files.walk(startDirPath);) {
@@ -162,7 +160,7 @@ public class GeoTagsPropagator {
 	}
 
     private static void assignFileDate(UntaggedPhotoWrapper untaggedWrapper) {
-        Path unTaggedPath = untaggedWrapper.getPath();
+        var unTaggedPath = untaggedWrapper.getPath();
         // here we assign file attributes.
         Optional.ofNullable(pathBasicFileAttributeViewMap.get(unTaggedPath))
                 .ifPresent(bfaView -> assignCommonFileTime(bfaView,
@@ -172,14 +170,14 @@ public class GeoTagsPropagator {
 	private static void assignGeoLocation(GeoLocation geoLocation, UntaggedPhotoWrapper untaggedWrapper) {
 
 		TiffOutputSet outputSet = null;
-		Path path = untaggedWrapper.getPath();
-		File imageFile = path.toFile();
+        var path = untaggedWrapper.getPath();
+        var imageFile = path.toFile();
 
 		try {
-			JpegImageMetadata jpegMetadata = (JpegImageMetadata) Imaging.getMetadata(imageFile);
+            var jpegMetadata = (JpegImageMetadata) Imaging.getMetadata(imageFile);
 			if (jpegMetadata != null) {
 				// note that exif might be null if no Exif metadata is found.
-				final TiffImageMetadata exif = jpegMetadata.getExif();
+                var exif = jpegMetadata.getExif();
 				if (null != exif) {
 					outputSet = getTiffOutputSet(exif, path);
 				} else {
@@ -192,10 +190,10 @@ public class GeoTagsPropagator {
 			return;
 		}
 
-		String formatTmp = "%stmp";
-		File outFile = new File(String.format(formatTmp, path.toString()));
+        var formatTmp = "%stmp";
+        var outFile = new File(String.format(formatTmp, path.toString()));
 
-        try (OutputStream os = new BufferedOutputStream(new FileOutputStream(outFile));) {
+        try (var os = new BufferedOutputStream(new FileOutputStream(outFile));) {
 			new ExifRewriter().updateExifMetadataLossless(imageFile, os, outputSet);
         } catch (ImageReadException | ImageWriteException e) {
 			LOG.log(Level.WARNING, "Error update exif metadata " + outFile.getAbsolutePath(), e);
@@ -231,14 +229,14 @@ public class GeoTagsPropagator {
 
 	private static void fillPathLists(Path path) {
 		// omitting directories
-        boolean isDirectory = Files.isDirectory(path, NO_FOLLOW_LINKS);
+        var isDirectory = Files.isDirectory(path, NO_FOLLOW_LINKS);
         if (isDirectory)
             return;
 
-        File file = path.toFile();
-        try (InputStream inputStream = new FileInputStream(file);) {
-			BufferedInputStream bufferedInputStream = new BufferedInputStream(inputStream);
-			FileType fileType = FileTypeDetector.detectFileType(bufferedInputStream);
+        var file = path.toFile();
+        try (var inputStream = new FileInputStream(file);) {
+            var bufferedInputStream = new BufferedInputStream(inputStream);
+            var fileType = FileTypeDetector.detectFileType(bufferedInputStream);
 
 			if (fileType != FileType.Jpeg) {
 				// we do not process files other than Jpeg.
@@ -248,7 +246,7 @@ public class GeoTagsPropagator {
 			LOG.log(Level.WARNING, "Could not read file " + path.toString(), e);
 		}
 
-		Metadata metadata = null;
+        Metadata metadata = null;
 		try {
 			metadata = ImageMetadataReader.readMetadata(file);
 		} catch (ImageProcessingException | IOException e) {
@@ -256,7 +254,7 @@ public class GeoTagsPropagator {
 			return;
 		}
 
-		Collection<GpsDirectory> gpsDirectories = metadata.getDirectoriesOfType(GpsDirectory.class);
+        var gpsDirectories = metadata.getDirectoriesOfType(GpsDirectory.class);
 		if (gpsDirectories.isEmpty()) {
 			processUntaggedFile(path, metadata);
 			// it is a usual file without geotags
@@ -267,53 +265,53 @@ public class GeoTagsPropagator {
 
     private static Instant getExifLDTFromMetadataExtractorMetadata(Metadata metadata) {
 		// from https://github.com/drewnoakes/metadata-extractor/wiki/FAQ
-		Collection<ExifSubIFDDirectory> exifDirectories = metadata.getDirectoriesOfType(ExifSubIFDDirectory.class);
+        var exifDirectories = metadata.getDirectoriesOfType(ExifSubIFDDirectory.class);
 		if (exifDirectories.isEmpty()) {
             return null;
 		}
 
-		ExifSubIFDDirectory exifDir = exifDirectories.iterator().next();
-		Date exifDate = exifDir.getDate(ExifDirectoryBase.TAG_DATETIME_ORIGINAL);
+        var exifDir = exifDirectories.iterator().next();
+        var exifDate = exifDir.getDate(ExifDirectoryBase.TAG_DATETIME_ORIGINAL);
         return convertDateToInstant(exifDate);
 	}
 
 	private static void processUntaggedFile(Path path, Metadata metadata) {
 
-        Instant exifInstant = getExifLDTFromMetadataExtractorMetadata(metadata);
+        var exifInstant = getExifLDTFromMetadataExtractorMetadata(metadata);
         if (exifInstant == null) {
 			LOG.log(Level.WARNING, "No ExifSubIFDDirectory for " + path.toString());
 			return;
 		}
 
-        UntaggedPhotoWrapper untaggedWrapper = new UntaggedPhotoWrapper(path, exifInstant, metadata);
+        var untaggedWrapper = new UntaggedPhotoWrapper(path, exifInstant, metadata);
 		untaggedPathsList.add(untaggedWrapper);
 		pathBasicFileAttributeViewMap.put(path, Files.getFileAttributeView(path, BasicFileAttributeView.class));
 	}
 
 	private static void processGeoTaggedFile(Path path, Collection<GpsDirectory> gpsDirectories, Metadata metadata) {
 
-        Instant exifInstant = getExifLDTFromMetadataExtractorMetadata(metadata);
+        var exifInstant = getExifLDTFromMetadataExtractorMetadata(metadata);
         if (exifInstant == null) {
 			LOG.log(Level.WARNING, "No ExifSubIFDDirectory for " + path.toString());
 
 		}
 
-		GpsDirectory gpsDir = gpsDirectories.iterator().next();
-		GeoLocation extractedGeoLocation = gpsDir.getGeoLocation();
+        var gpsDir = gpsDirectories.iterator().next();
+        var extractedGeoLocation = gpsDir.getGeoLocation();
 
-		if (!(extractedGeoLocation != null && !extractedGeoLocation.isZero())) {
+        if (!(Objects.nonNull(extractedGeoLocation) && !extractedGeoLocation.isZero())) {
 			return;
 		}
 
-        Instant correctedInstant = getCorrectedInstant(gpsDir, exifInstant);
-		GeoLocation roundedGeoLocation = getRoundedGeoLocation(extractedGeoLocation);
+        var correctedInstant = getCorrectedInstant(gpsDir, exifInstant);
+        var roundedGeoLocation = getRoundedGeoLocation(extractedGeoLocation);
 
-        GeoTaggedPhotoWrapper geoWrapper = new GeoTaggedPhotoWrapper(path, correctedInstant, roundedGeoLocation,
+        var geoWrapper = new GeoTaggedPhotoWrapper(path, correctedInstant, roundedGeoLocation,
                 gpsDir);
 		geotaggedPathsList.add(geoWrapper);
 
-		BasicFileAttributeView pathBFAView = Files.getFileAttributeView(path, BasicFileAttributeView.class);
-        FileTime universalFT = getFileTimeFromInstant(correctedInstant);
+        var pathBFAView = Files.getFileAttributeView(path, BasicFileAttributeView.class);
+        var universalFT = getFileTimeFromInstant(correctedInstant);
 		assignCommonFileTime(pathBFAView, universalFT, path);
 	}
 
@@ -321,11 +319,11 @@ public class GeoTagsPropagator {
 
 		// here we should process geolocation and round it somehow up to 10-20
 		// meters.
-		double unRoundedLatitude = extractedGeoLocation.getLatitude();
-		double roundedLatitude = roundTo4DecimalPlaces(unRoundedLatitude);
+        var unRoundedLatitude = extractedGeoLocation.getLatitude();
+        var roundedLatitude = roundTo4DecimalPlaces(unRoundedLatitude);
 
-		double unRoundedLongitude = extractedGeoLocation.getLongitude();
-		double roundedLongitude = roundTo4DecimalPlaces(unRoundedLongitude);
+        var unRoundedLongitude = extractedGeoLocation.getLongitude();
+        var roundedLongitude = roundTo4DecimalPlaces(unRoundedLongitude);
 
         // constructing rounded geolocation for path.
 		return new GeoLocation(roundedLatitude, roundedLongitude);
@@ -333,19 +331,19 @@ public class GeoTagsPropagator {
 
     private static Instant getCorrectedInstant(GpsDirectory gpsDir, Instant exifInstant) {
         Instant correctedInstant;
-        Date gpsDate = gpsDir.getGpsDate();
+        var gpsDate = gpsDir.getGpsDate();
 
         if (Objects.isNull(exifInstant) && Objects.isNull(gpsDate)) {
             return null; // it is null
         }
 
         if (gpsDate != null) {
-            Instant gpsInstant = convertDateToInstant(gpsDate);
+            var gpsInstant = convertDateToInstant(gpsDate);
             if (exifInstant == null) {
                 return gpsInstant;
             }
 
-            long minutesDiff = gpsInstant.until(exifInstant, ChronoUnit.MINUTES);
+            var minutesDiff = gpsInstant.until(exifInstant, ChronoUnit.MINUTES);
             correctedInstant = (minutesDiff % 60 == 0) ? exifInstant : gpsInstant;
         } else {
             // gps date is null

@@ -1,3 +1,5 @@
+package org.geotags.manager;
+
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Objects;

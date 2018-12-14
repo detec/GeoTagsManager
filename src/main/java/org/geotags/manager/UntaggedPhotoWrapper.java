@@ -1,3 +1,5 @@
+package org.geotags.manager;
+
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Objects;
@@ -18,7 +20,6 @@ public class UntaggedPhotoWrapper {
 	private Metadata metadata;
 
     public UntaggedPhotoWrapper(Path path, Instant fileDateTime, Metadata metadata) {
-		super();
 		this.path = path;
 		this.fileDateTime = fileDateTime;
 		this.metadata = metadata;
